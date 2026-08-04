@@ -1,0 +1,8 @@
+model Greeting:
+    id: UUID?
+    name: String
+
+route GET /hello/:name -> hello
+
+handler hello(name: String) -> Greeting:
+    return Greeting(name=name)
