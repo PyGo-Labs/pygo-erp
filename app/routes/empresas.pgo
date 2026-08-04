@@ -1,0 +1,181 @@
+# Import models
+from models import (
+  Empresa, Categoria, Producto, Cliente,
+  Proveedor, Factura, FacturaLinea, Inventario,
+  Usuario, Configuracion
+)
+
+# Import UI components
+from ui import Table, Form, Modal, Badge, Icon
+
+# Import auth
+from auth import auth_required, current_user
+from multitenancy import tenant_required
+
+# ─── Company Management ───
+route GET /empresas -> empresas.list
+route GET /empresas/create -> empresas.create_form
+route POST /empresas -> empresas.store
+route GET /empresas/{id} -> empresas.show
+route GET /empresas/{id}/edit -> empresas.edit_form
+route POST /empresas/{id} -> empresas.update
+route POST /empresas/{id}/delete -> empresas.delete
+
+handler empresas_list:
+  empresas.list() -> HTML:
+    empresas = Empresa.all(tenant=current_user.empresa)
+
+    return Table(
+      columns=["RFC", "Razón Social", "Email", "Teléfono", "Activo"],
+      rows=[
+        [
+          e.rfc, e.razon_social, e.email or "",
+          e.telefono or "", e.activo,
+        ]
+        for e in empresas
+      ],
+      actions=["create", "edit", "delete"],
+    )
+
+handler empresas_create:
+  empresas.create_form() -> HTML:
+    return Form(
+      title="Nueva Empresa",
+      fields=[
+        {"name": "rfc", "type": "text", "required": true, "label": "RFC"},
+        {"name": "razon_social", "type": "text", "required": true, "label": "Razón Social"},
+        {"name": "email", "type": "email", "label": "Email"},
+        {"name": "telefono", "type": "text", "label": "Teléfono"},
+        {"name": "direccion", "type": "textarea", "label": "Dirección"},
+      ],
+      submit="Guardar",
+      cancel="/empresas",
+    )
+
+handler empresas_store:
+  empresas.store() -> Redirect:
+    empresa = Empresa(
+      rfc=request.form["rfc"],
+      razon_social=request.form["razon_social"],
+      email=request.form.get("email"),
+      telefono=request.form.get("telefono"),
+      direccion=request.form.get("direccion"),
+    )
+    empresa.save()
+
+    flash("success", f"Empresa {empresa.razon_social} creada")
+    return redirect("/empresas")
+
+# ─── Product Management ───
+route GET /productos -> productos.list
+route GET /productos/create -> productos.create_form
+route POST /productos -> productos.store
+route GET /productos/{id} -> productos.show
+route GET /productos/{id}/edit -> productos.edit_form
+route POST /productos/{id} -> productos.update
+route POST /productos/{id}/delete -> productos.delete
+
+handler productos_list:
+  productos.list(q: String?) -> HTML:
+    query = Producto.where("empresa", current_user.empresa)
+    if q:
+      query = query.where("nombre__ilike", f"%{q}%")
+
+    productos = query.limit(20).all()
+
+    return Table(
+      columns=["Código", "Nombre", "Precio", "Categoría", "Stock", "Activo"],
+      rows=[
+        [
+          p.codigo, p.nombre,
+          f"${p.precio_unitario}",
+          p.categoria or "-",
+          str(Inventario.get(producto=p.id).stock_actual) if Inventario.get(producto=p.id) else "0",
+          Badge(p.activo, variant="green" if p.activo else "red"),
+        ]
+        for p in productos
+      ],
+    )
+
+handler productos_store:
+  productos.store() -> Redirect:
+    precio = Decimal(request.form["precio_unitario"])
+    producto = Producto(
+      codigo=request.form["codigo"],
+      nombre=request.form["nombre"],
+      descripcion=request.form.get("descripcion"),
+      precio_unitario=precio,
+      categoria=request.form.get("categoria"),
+      empresa=current_user.empresa,
+    )
+    producto.save()
+
+    # Create inventory
+    Inventario(
+      producto=producto.id,
+      empresa=current_user.empresa,
+    ).save()
+
+    flash("success", "Producto creado")
+    return redirect("/productos")
+
+# ─── Client Management ───
+route GET /clientes -> clientes.list
+route POST /clientes -> clientes.store
+route GET /clientes/{id} -> clientes.show
+
+handler clientes_store:
+  clientes.store() -> Redirect:
+    Cliente(
+      nombre=request.form["nombre"],
+      rfc=request.form.get("rfc"),
+      email=request.form.get("email"),
+      telefono=request.form.get("telefono"),
+      direccion=request.form.get("direccion"),
+      empresa=current_user.empresa,
+    ).save()
+
+    flash("success", "Cliente creado")
+    return redirect("/clientes")
+
+# ─── Facturas ───
+route GET /facturas -> facturas.list
+route POST /facturas -> facturas.store
+
+handler facturas_store:
+  facturas.store() -> Redirect:
+    factura = Factura(
+      tipo=request.form.get("tipo", "venta"),
+      folio=request.form["folio"],
+      total=Decimal(request.form["total"]),
+      cliente=request.form.get("cliente"),
+      empresa=current_user.empresa,
+    )
+    factura.save()
+
+    flash("success", "Factura creada")
+    return redirect("/facturas")
+
+# ─── Dashboard ───
+route GET / -> dashboard:
+  dashboard() -> HTML:
+    stats = {
+      "productos": Producto.count(where={"empresa": current_user.empresa}),
+      "clientes": Cliente.count(where={"empresa": current_user.empresa}),
+      "facturas": Factura.count(where={"empresa": current_user.empresa}),
+      "proveedores": Proveedor.count(where={"empresa": current_user.empresa}),
+    }
+
+    return template("dashboard.html", stats=stats)
+
+# ─── Configuration ───
+route GET /configuracion -> config.index
+route POST /configuracion -> config.store
+
+handler config_store:
+  config.store() -> Redirect:
+    for key, value in request.form.items():
+      Configuracion.set(key, value, empresa=current_user.empresa)
+
+    flash("success", "Configuración guardada")
+    return redirect("/configuracion")

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PyGo ERP — {{ empresa.razon_social }}</title>
+  <script src="https://unpkg.com/htmx@2.0.0/dist/htmx.js"></script>
+  <script src="https://unpkg.com/alpinejs@3.x/dist/cdn.min.js" defer></script>
+  <link href="https://cdn.pygo.dev/ui/v0.5.0/pygo-ui.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 font-sans">
+  <nav class="bg-slate-900 text-white p-4">
+    <div class="container mx-auto flex justify-between items-center">
+      <h1 class="text-xl font-bold">PyGo ERP</h1>
+      <div class="flex items-center gap-4">
+        <span class="text-sm">Bienvenido, {{ current_user.nombre }}</span>
+        <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+          {{ current_user.empresa }}
+        </span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mx-auto p-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white p-4 rounded-lg shadow">
+        <h3 class="text-sm text-gray-500">Productos</h3>
+        <p class="text-2xl font-bold text-blue-600">{{ stats.productos }}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow">
+        <h3 class="text-sm text-gray-500">Clientes</h3>
+        <p class="text-2xl font-bold text-green-600">{{ stats.clientes }}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow">
+        <h3 class="text-sm text-gray-500">Facturas</h3>
+        <p class="text-2xl font-bold text-yellow-600">{{ stats.facturas }}</p>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow">
+        <h3 class="text-sm text-gray-500">Proveedores</h3>
+        <p class="text-2xl font-bold text-purple-600">{{ stats.proveedores }}</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold mb-4">Accesos rápidos</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <a href="/productos" class="p-3 bg-blue-50 rounded-lg text-center hover:bg-blue-100">
+          <Icon name="package" class="w-6 h-6 mx-auto text-blue-600" />
+          <span class="block mt-1">Productos</span>
+        </a>
+        <a href="/clientes" class="p-3 bg-green-50 rounded-lg text-center hover:bg-green-100">
+          <Icon name="users" class="w-6 h-6 mx-auto text-green-600" />
+          <span class="block mt-1">Clientes</span>
+        </a>
+        <a href="/facturas" class="p-3 bg-yellow-50 rounded-lg text-center hover:bg-yellow-100">
+          <Icon name="file-text" class="w-6 h-6 mx-auto text-yellow-600" />
+          <span class="block mt-1">Facturas</span>
+        </a>
+        <a href="/configuracion" class="p-3 bg-gray-50 rounded-lg text-center hover:bg-gray-100">
+          <Icon name="settings" class="w-6 h-6 mx-auto text-gray-600" />
+          <span class="block mt-1">Config</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

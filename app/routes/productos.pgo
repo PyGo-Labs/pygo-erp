@@ -1,0 +1,52 @@
+# Import models
+from models import Empresa
+
+route GET /productos -> productos.list
+route GET /productos/create -> productos.create_form
+route POST /productos -> productos.store
+route GET /productos/{id} -> productos.show
+route GET /productos/{id}/edit -> productos.edit_form
+route POST /productos/{id} -> productos.update
+route POST /productos/{id}/delete -> productos.delete
+
+handler productos_list:
+  productos.list(q: String?) -> HTML:
+    query = Producto.where("empresa", current_user.empresa)
+    if q:
+      query = query.where("nombre__ilike", f"%{q}%")
+    productos = query.limit(20).all()
+    return Table(
+      columns=["Código", "Nombre", "Precio", "Categoría", "Activo"],
+      rows=[
+        [p.codigo, p.nombre, f"${p.precio_unitario}", p.categoria or "-", p.activo]
+        for p in productos
+      ],
+    )
+
+handler productos_create_form:
+  productos.create_form() -> HTML:
+    categorias = Categoria.where("empresa", current_user.empresa).all()
+    return Form(
+      title="Nuevo Producto",
+      fields=[
+        {"name": "codigo", "type": "text", "required": true, "label": "Código"},
+        {"name": "nombre", "type": "text", "required": true, "label": "Nombre"},
+        {"name": "descripcion", "type": "textarea", "label": "Descripción"},
+        {"name": "precio_unitario", "type": "number", "step": "0.01", "required": true, "label": "Precio"},
+        {"name": "categoria", "type": "select", "options": [(c.id, c.nombre) for c in categorias], "label": "Categoría"},
+      ],
+      submit="Guardar",
+    )
+
+handler productos_store:
+  productos.store() -> Redirect:
+    Producto(
+      codigo=request.form["codigo"],
+      nombre=request.form["nombre"],
+      descripcion=request.form.get("descripcion"),
+      precio_unitario=Decimal(request.form["precio_unitario"]),
+      categoria=request.form.get("categoria"),
+      empresa=current_user.empresa,
+    ).save()
+    flash("success", "Producto creado")
+    return redirect("/productos")

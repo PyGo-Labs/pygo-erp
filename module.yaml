@@ -1,0 +1,13 @@
+name: pygo-erp
+version: "0.1.0"
+description: ERP/CRM database models and CRUD routes showcase for PyGo Framework
+category: showcase
+license: MIT
+dependencies:
+  pygo-framework: ">=1.2.0"
+  pygo-ui: ">=0.5.0"
+  pygo-multitenancy: ">=0.1.0"
+  pygo-admin: ">=0.5.0"
+repository:
+  type: git
+  url: https://github.com/PyGo-labs/pygo-erp
