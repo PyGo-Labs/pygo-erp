@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <h2 class="text-xl font-bold">Tareas — {{ proyecto.nombre if proyecto else "" }}</h2>
+</div>
+
+<div class="flex overflow-x-auto gap-4 pb-4">
+  {% for column_name, column_tasks in tareas_por_estatus.items() %}
+  <div class="bg-gray-50 rounded-lg p-4 min-w-72">
+    <h3 class="font-semibold text-gray-700 mb-3 capitalize">{{ column_name }}</h3>
+    <div class="space-y-3">
+      {% for tarea in column_tasks %}
+      <div class="bg-white rounded-lg shadow p-4 border border-gray-200">
+        <div class="flex justify-between items-start">
+          <h4 class="font-medium">{{ tarea.titulo }}</h4>
+          <span class="px-2 py-1 rounded-full text-xs {{
+            {'alta': 'bg-red-100 text-red-800',
+             'critica': 'bg-red-200 text-red-900',
+             'normal': 'bg-blue-100 text-blue-800',
+             'baja': 'bg-gray-100 text-gray-600'}[tarea.prioridad] or 'bg-gray-100'
+          }}">
+            {{ tarea.prioridad }}
+          </span>
+        </div>
+        {% if tarea.descripcion %}
+        <p class="text-sm text-gray-600 mt-2">{{ tarea.descripcion }}</p>
+        {% endif %}
+        {% if tarea.fecha_fin %}
+        <p class="text-xs text-gray-500 mt-2">
+          Vence: {{ tarea.fecha_fin.strftime("%d/%m/%Y") }}
+        </p>
+        {% endif %}
+        {% if tarea.responsable %}
+        <p class="text-xs text-gray-500 mt-1">
+          Responsable: {{ tarea.responsable.nombre }}
+        </p>
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="text-xs text-gray-400">No hay tareas</p>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

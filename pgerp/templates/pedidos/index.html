@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <h2 class="text-xl font-bold">Pedidos de Venta</h2>
+  <a href="/pedidos/create" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+    + Nuevo Pedido
+  </a>
+</div>
+
+<div class="bg-white rounded-lg shadow overflow-x-auto">
+  <table class="w-full">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-xs">Folio</th>
+        <th class="px-4 py-3 text-xs">Fecha</th>
+        <th class="px-4 py-3 text-xs">Cliente</th>
+        <th class="px-4 py-3 text-right text-xs">Total</th>
+        <th class="px-4 py-3 text-center text-xs">Estatus</th>
+        <th class="px-4 py-3 text-center text-xs">Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in items %}
+      <tr class="border-t">
+        <td class="px-4 py-3">{{ p.folio }}</td>
+        <td class="px-4 py-3">{{ p.fecha.strftime("%d/%m/%Y") if p.fecha else "-" }}</td>
+        <td class="px-4 py-3">{{ p.cliente.nombre if p.cliente_id else "-" }}</td>
+        <td class="px-4 py-3 text-right">${{ "%.2f"|format(p.total) }}</td>
+        <td class="px-4 py-3 text-center">
+          <span class="px-2 py-1 rounded-full text-xs {{
+            {'borrador': 'bg-gray-100',
+             'confirmado': 'bg-blue-100',
+             'entregado': 'bg-green-100',
+             'cancelado': 'bg-red-100'}[p.estatus] or 'bg-gray-100'
+          }} text-xs">
+            {{ p.estatus | capitalize }}
+          </span>
+        </td>
+        <td class="px-4 py-3 text-center">
+          <a href="/pedidos/{{ p.id }}" class="text-blue-600 mr-2">Ver</a>
+          {% if p.estatus == "confirmado" %}
+          <button onclick="facturarPedido('{{ p.id }}')" class="text-green-600 text-xs">Facturar</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="px-4 py-8 text-center">No hay pedidos</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function facturarPedido(id) {
+  fetch(`/pedidos/${id}/facturar`, {method: 'POST'})
+    .then(() => htmx.reload())
+}
+</script>
+{% endblock %}
