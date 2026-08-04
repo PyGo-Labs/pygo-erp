@@ -1,0 +1,25 @@
+# PyGo project config — PyGo ERP (pgerp)
+dsl_version = "0.0.1"
+name = "pgerp"
+version = "0.1.0"
+description = "PyGo ERP — full ERP system built with PyGo Framework"
+
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[python]
+interpreter = "python3"
+module = "app.py"
+
+[database]
+default = "sqlite"
+sqlite_path = "./data/pgerp.db"
+
+[languages]
+default = "es"
+supported = ["es", "en"]
+
+[auth]
+session_timeout = 3600
+jwt_expiry = 86400

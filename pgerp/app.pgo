@@ -1,0 +1,278 @@
+# ═══════════════════════════════════════════════
+#  PyGo ERP (pgerp) — Main Application Routes
+# ═══════════════════════════════════════════════
+
+# Imports
+from models import Empresa, Usuario, Producto, Cliente, Proveedor, Factura, Inventario, Pedido, Proyecto, Tarea, Empleado
+from controllers import ProductoController, FacturaController, InventarioController, ProyectoController, TareasController, FacturacionService, InventarioService
+from auth import auth_required, current_user
+from i18n import i18n, locale
+from observability import tracer, metrics, logger
+from admin import AdminPanel
+from ui import Navbar, Sidebar, Table
+
+# ═══════════════════════════════════════════════
+#  Dashboard
+# ═══════════════════════════════════════════════
+
+route GET / -> dashboard
+route GET /dashboard -> dashboard
+
+handler dashboard() -> HTML:
+  """Analytics dashboard with KPIs."""
+  empresa = current_user.empresa_id
+
+  stats = {
+    productos: Producto.count(where: {empresa: empresa}),
+    clientes: Cliente.count(where: {empresa: empresa}),
+    proveedores: Proveedor.count(where: {empresa: empresa}),
+    facturas_mes: Factura.count(where: {empresa: empresa, fecha__gte: month_start()}),
+    inventario_bajo: Inventario.count(where: {empresa: empresa, "stock_actual < stock_minimo": True}),
+    pedidos_activos: Pedido.count(where: {empresa: empresa, estatus: "confirmado"}),
+  }
+
+  ingresos_mes = Factura.sum("total", where: {
+    empresa: empresa,
+    tipo: "venta",
+    fecha__gte: month_start(),
+  })
+
+  return template("dashboard.html", {
+    stats: stats,
+    ingresos_mes: ingresos_mes,
+    empresa: empresa,
+  })
+
+
+# ═══════════════════════════════════════════════
+#  Auth & Security
+# ═══════════════════════════════════════════════
+
+route GET /login -> auth.login_page
+route POST /login -> auth.authenticate
+route POST /logout -> auth.logout
+
+handler login_page() -> HTML:
+  return template("auth/login.html")
+
+handler authenticate(email: String, password: String) -> Redirect:
+  user = Usuario.where("email", email).where("empresa", empresa_actual.id).first()
+  if user and verify_password(user.password_hash, password):
+    session.set("user_id", user.id)
+    session.set("empresa_id", user.empresa)
+    log.info("User logged in", user=user.email)
+    return redirect("/dashboard")
+  log.warn("Login failed", email=email)
+  flash("error", "Credenciales inválidas")
+  return redirect("/login")
+
+
+route POST /logout -> auth.logout
+handler logout() -> Redirect:
+  session.clear()
+  return redirect("/login")
+
+
+# ═══════════════════════════════════════════════
+#  Admin Routes — Products
+# ═══════════════════════════════════════════════
+
+route GET /productos -> productos.index
+route GET /productos/create -> productos.create
+route POST /productos -> productos.store
+route GET /productos/{id} -> productos.show
+route GET /productos/{id}/edit -> productos.edit
+route POST /productos/{id} -> productos.update
+route POST /productos/{id}/delete -> productos.delete
+
+handler productos_index(q: String?, page: Int = 1) -> HTML:
+  controller = ProductoController()
+  return controller.index(request={page: page, q: q})
+
+handler productos_store() -> Redirect:
+  Producto(
+    codigo: request.form["codigo"],
+    nombre: request.form["nombre"],
+    precio_unitario: Decimal(request.form["precio_unitario"]),
+    empresa: current_user.empresa,
+  ).save()
+  flash("success", "Producto creado")
+  return redirect("/productos")
+
+
+# ═══════════════════════════════════════════════
+#  Admin Routes — Products
+# ═══════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════
+#  Facturas (Invoicing)
+# ═══════════════════════════════════════════════
+
+route GET /facturas -> facturas.index
+route GET /facturas/create -> facturas.create
+route POST /facturas -> facturas.store
+route GET /facturas/{id} -> facturas.show
+route POST /facturas/{id}/timbrar -> facturas.timbrar
+
+handler facturas_store(tipo: String, folio: String, cliente_id: UUID) -> Redirect:
+  factura = Factura(
+    tipo: tipo,
+    folio: folio,
+    cliente: cliente_id,
+    empresa: current_user.empresa,
+  )
+  factura.calcular_totales()  # Auto-calculate from lines
+  factura.save()
+  flash("success", "Factura creada")
+  return redirect("/facturas")
+
+
+# ═══════════════════════════════════════════════
+#  Inventory Management
+# ═══════════════════════════════════════════════
+
+route GET /inventario -> inventario.index
+route GET /inventario/bajo-stock -> inventario.bajo_stock
+route POST /inventario/entrada -> inventario.entrada
+route POST /inventario/salida -> inventario.salida
+
+handler inventario_entrada(producto_id: UUID, cantidad: Decimal, almacen: String) -> Redirect:
+  InventarioService.entrada(producto_id, float(cantidad), almacen)
+  metrics.increment("inventory.entry", 1, {producto: str(producto_id)})
+  return redirect("/inventario")
+
+
+# ═══════════════════════════════════════════════
+#  Sales Orders
+# ═══════════════════════════════════════════════
+
+route GET /pedidos -> pedidos.index
+route GET /pedidos/create -> pedidos.create
+route POST /pedidos -> pedidos.store
+route GET /pedidos/{id} -> pedidos.show
+
+handler pedidos_store(cliente_id: UUID, productos: Array[dict]) -> Redirect:
+  """Create sales order from product list."""
+  pedido = Pedido(
+    tipo: "pedido",
+    folio: f"PED-{uuid_short()}",
+    cliente: cliente_id,
+    empresa: current_user.empresa,
+  )
+  pedido.save()
+
+  total = Decimal("0")
+  for prod in productos:
+    linea = PedidoLinea(
+      pedido: pedido.id,
+      producto: prod["producto_id"],
+      cantidad: Decimal(prod["cantidad"]),
+      precio_unitario: Decimal(prod["precio"]),
+    )
+    linea.total_linea = linea.cantidad * linea.precio_unitario
+    linea.save()
+    total += linea.total_linea
+
+  pedido.total = total
+  pedido.save()
+
+  metrics.increment("sales.order_created", 1)
+  return redirect(f"/pedidos/{pedido.id}")
+
+
+# ═══════════════════════════════════════════════
+#  Purchasing
+# ═══════════════════════════════════════════════
+
+route GET /ordenes-compra -> compras.index
+route POST /ordenes-compra -> compras.store
+
+handler compras_store(proveedor_id: UUID, productos: Array[dict]) -> Redirect:
+  orden = OrdenCompra(
+    folio: f"OC-{uuid_short()}",
+    proveedor: proveedor_id,
+    empresa: current_user.empresa,
+  )
+  orden.save()
+  return redirect(f"/ordenes-compra/{orden.id}")
+
+
+# ═══════════════════════════════════════════════
+#  Human Resources
+# ═══════════════════════════════════════════════
+
+route GET /empleados -> rrhh.empleados
+route GET /empleados/create -> rrhh.create_empleado
+route POST /empleados -> rrhh.store_empleado
+
+route GET /departamentos -> rrhh.departamentos
+route GET /puestos -> rrhh.puestos
+
+
+# ═══════════════════════════════════════════════
+#  Projects
+# ═══════════════════════════════════════════════
+
+route GET /proyectos -> proyectos.index
+route GET /proyectos/kanban -> proyectos.kanban
+route GET /proyectos/{id}/tareas -> proyectos.tareas
+
+route GET /tareas/kanban -> tareas_controller.kanban
+
+
+# ═══════════════════════════════════════════════
+#  Reports
+# ═══════════════════════════════════════════════
+
+route GET /reportes/ventas -> reportes.ventas
+route GET /reportes/inventario -> reportes.inventario
+route GET /reportes/contabilidad -> reportes.contabilidad
+
+handler reportes_ventas(fecha_inicio: Date, fecha_fin: Date) -> HTML:
+  """Sales report between dates."""
+  query = Factura.where("empresa", current_user.empresa)
+  query = query.where("tipo", "venta")
+  query = query.where("fecha__gte", fecha_inicio)
+  query = query.where("fecha__lte", fecha_fin)
+
+  report_data = {
+    total_ventas: query.sum("total"),
+    total_iva: query.sum("iva"),
+    facturas: query.all(),
+    by_category: query.group_by("producto.categoria").sum("total_linea"),
+  }
+
+  return template("reportes/ventas.html", report_data)
+
+
+# ═══════════════════════════════════════════════
+#  Settings
+# ═══════════════════════════════════════════════
+
+route GET /configuracion -> config.index
+route POST /configuracion -> config.store
+
+handler config_store() -> Redirect:
+  for key, value in request.form.items():
+    Configuracion.set(key, value, empresa=current_user.empresa)
+  flash("success", "Configuración guardada")
+  return redirect("/configuracion")
+
+
+# ═══════════════════════════════════════════════
+#  API Endpoints (REST)
+# ═══════════════════════════════════════════════
+
+route GET /api/productos -> api.productos
+route GET /api/facturas -> api.facturas
+route GET /api/inventario -> api.inventario
+
+handler api_productos(page: Int = 1, limit: Int = 50) -> JSON:
+  query = Producto.where("empresa", current_user.empresa)
+  productos = query.paginate(page, limit).all()
+  return json([{
+    id: p.id,
+    codigo: p.codigo,
+    nombre: p.nombre,
+    precio: float(p.precio_unitario),
+  } for p in productos])
