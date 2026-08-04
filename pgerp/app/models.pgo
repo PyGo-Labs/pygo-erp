@@ -1,0 +1,133 @@
+# PyGo ERP — PyGo models
+# Transpiled from models.py to .pgo syntax
+
+model Empresa:
+    id: UUID?
+    rfc: String
+    razon_social: String
+    nombre_comercial: String?
+    email: Email?
+    telefono: String?
+    direccion: String?
+    ciudad: String?
+    estado: String?
+    codigo_postal: String?
+    pais: String = "MX"
+    moneda: String = "MXN"
+    activo: Boolean = true
+    created_at: DateTime?
+    updated_at: DateTime?
+
+model Usuario:
+    id: UUID?
+    nombre: String
+    email: Email
+    password_hash: String
+    rol: Enum = usuario  # admin | gerente | usuario | cliente
+    empresa: UUID
+    created_at: DateTime?
+
+model Producto:
+    id: UUID?
+    codigo: String
+    nombre: String
+    descripcion: String?
+    tipo: Enum = producto  # producto | servicio
+    categoria: UUID?
+    unidad_medida: String = "pz"
+    precio_unitario: Decimal = 0.00
+    costo: Decimal?
+    stock_minimo: Decimal = 0
+    empresa: UUID
+    activo: Boolean = true
+    created_at: DateTime?
+
+model Categoria:
+    id: UUID?
+    nombre: String
+    descripcion: String?
+    tipo: Enum = producto
+    empresa: UUID?
+
+model Cliente:
+    id: UUID?
+    nombre: String
+    rfc: String?
+    email: Email?
+    telefono: String?
+    direccion: String?
+    empresa: UUID
+    created_at: DateTime?
+
+model Proveedor:
+    id: UUID?
+    nombre: String
+    rfc: String?
+    email: Email?
+    telefono: String?
+    empresa: UUID
+    created_at: DateTime?
+
+model Factura:
+    id: UUID?
+    tipo: Enum = venta  # venta | compra
+    folio: String
+    serie: String?
+    fecha: DateTime?
+    subtotal: Decimal = 0
+    iva: Decimal = 0
+    total: Decimal = 0
+    cliente: UUID?
+    proveedor: UUID?
+    estatus: Enum = borrador  # borrador | timbrada | pagada | cancelada
+    empresa: UUID
+    created_at: DateTime?
+
+model Inventario:
+    id: UUID?
+    producto: UUID
+    almacen: String = "default"
+    stock_actual: Decimal = 0
+    stock_minimo: Decimal = 0
+    ubicacion: String?
+    empresa: UUID
+
+model Pedido:
+    id: UUID?
+    tipo: Enum = pedido
+    folio: String
+    fecha: DateTime?
+    cliente: UUID
+    subtotal: Decimal = 0
+    total: Decimal = 0
+    estatus: Enum = borrador
+    empresa: UUID
+
+model Empleado:
+    id: UUID?
+    nombre: String
+    apellidos: String?
+    email: Email?
+    departamento: String?
+    puesto: String?
+    salario: Decimal?
+    fecha_ingreso: Date?
+    empresa: UUID
+
+model Proyecto:
+    id: UUID?
+    nombre: String
+    descripcion: String?
+    cliente: UUID?
+    estatus: Enum = activo
+    presupuesto: Decimal?
+    empresa: UUID
+
+model Tarea:
+    id: UUID?
+    proyecto: UUID
+    titulo: String
+    descripcion: String?
+    estatus: Enum = pendiente
+    prioridad: Enum = normal
+    fecha_fin: Date?

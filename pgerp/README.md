@@ -1,15 +1,15 @@
 # PyGo ERP (pgerp)
 
-Complete ERP/CRM system built with [PyGo Framework](https://github.com/PyGo-labs/pygo-framework) — covering accounting, inventory, sales, purchasing, HR, project management, and more.
+Complete ERP/CRM system built natively with PyGo Framework — using `.pgo` DSL syntax, native models, HTMX templates, and the full PyGo ecosystem.
 
 ## 🚀 Quick Start
 
 ```bash
-# Create the ERP project using PyGo CLI
+# Option 1: Use PyGo CLI to scaffold the project
 pygo new pgerp "PyGo ERP" --full-stack
 cd pgerp
 
-# Install all required modules
+# Install required modules
 pygo module install auth
 pygo module install multitenancy
 pygo module install i18n
@@ -18,70 +18,84 @@ pygo module install notifications
 pygo module install admin
 pygo module install ui
 
-# Run database migrations
+# Run migrations
 pygo db migrate
 
-# Start the server
+# Start the server — ¡te consulto antes de levantar!
 pygo serve
 ```
 
-Visit `http://localhost:8080` → Login page
+Visit `http://localhost:8080` — PyGo ERP dashboard
 
-## 🏗️ Architecture
+## 🏗️ Arquitectura Native PyGo
 
-Built on the full PyGo ecosystem:
-
-| Module | Version | Purpose |
-|--------|---------|---------|
-| pygo-framework | v1.2.0 | Core runtime + transpiler |
-| pygo-multitenancy | v0.1.0 | Multi-company/tenant isolation |
-| pygo-auth | v1.0.0 | RBAC + JWT sessions |
-| pygo-i18n | v0.1.0 | Spanish/English, multi-domain |
-| pygo-observability | v0.1.0 | Tracing + metrics |
-| pygo-notifications | v0.1.0 | Email/SMS/Push |
-| pygo-admin | v0.5.0 | CRUD UI components |
-| pygo-ui | v0.5.0 | 44 HTMX components |
-
-## 📦 Modules (10 ERP areas)
+Todo escrito en `.pgo` — sin necesidad de Python:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  PYGO ERP — Full ERP Suite                          │
-├──────────────┬──────────────┬──────────────────────┤
-│ 📊 Contabilidad │ 📦 Inventario  │ 🛒 Ventas           │
-│ - Facturas       │ - Stock          │ - Pedidos           │
-│ - Cuentas        │ - Movimientos    │ - Clientes          │
-│ - Pagos          │ - Almacenes      │ - Cotizaciones      │
-├──────────────┬──────────────┬──────────────────────┤
-│ 🛒 Compras        │ 👥 RRHH         │ 📁 Proyectos        │
-│ - Órdenes        │ - Empleados      │ - Proyectos          │
-│ - Proveedores     │ - Departamentos  │ - Tareas            │
-│ - Recepciones    │ - Puestos        │ - Timesheets        │
-├──────────────┬──────────────┬──────────────────────┤
-│ ⚙️ Config        │ 📈 Reportes    │ 📱 Mobile           │
-│ - Monedas        │ - Ventas         │ - Responsive UI      │
-│ - Impuestos       │ - Inventario      │ - HTMX/PWA         │
-│ - Usuarios        │ - Contabilidad    │                     │
-└─────────────────────────────────────────────────────┘
+pgerp/
+├── pygo.toml          # Project config (DSL v0.0.1)
+├── app.pgo            # Main routes + handlers (native DSL)
+├── models.pgo         # Database models (native DSL)
+├── migrations/        # SQL schema
+│   └── 001_schema.sql
+├── templates/         # HTMX templates
+│   ├── base.html
+│   ├── dashboard.html
+│   ├── auth/login.html
+│   ├── productos/
+│   │   ├── index.html
+│   │   └── form.html
+│   ├── clientes/
+│   ├── proveedores/
+│   ├── facturas/
+│   ├── inventario/
+│   ├── pedidos/
+│   ├── empleados/
+│   ├── proyectos/
+│   │   └── kanban.html
+│   ├── tareas/
+│   │   └── kanban.html
+│   ├── reportes/
+│   │   └── ventas.html
+│   └── configuracion/
+│       └── index.html
+└── tests/
 ```
 
-## 🎯 Features
+## 📦 Models (Native .pgo)
 
-- Multi-tenancy (multi-company support)
-- Multi-currency with exchange rates
-- Multi-language (Spanish/English)
-- RBAC (Role-based access control)
-- Full CRUD with HTMX (no page reloads)
-- REST API endpoints
-- Traceability (tracing + metrics)
-- Reports (PDF/Excel planned)
-- Mobile-responsive UI (pygo-ui v0.5.0)
+All models written in PyGo DSL — transpiled to Go and Python automatically:
+
+```pgo
+# models.pgo
+model Producto:
+  codigo: String
+  nombre: String
+  descripcion: String?
+  tipo: Enum = producto
+  categoria: UUID?
+  unidad_medida: String = "pz"
+  precio_unitario: Decimal = 0.00
+  empresa: UUID
+  activo: Boolean = true
+```
+
+## 🎯 Modules
+
+| Module | Purpose |
+|--------|---------|
+| `auth` | RBAC + JWT sessions |
+| `multitenancy` | Multi-company isolation |
+| `i18n` | Multi-language (ES/EN) |
+| `observability` | Tracing + metrics |
+| `notifications` | Email/SMS/Push |
+| `admin` | CRUD UI components |
+| `ui` | 44 HTMX components |
 
 ## 🧪 Testing
 
 ```bash
-# Run ERP tests
-pygo test app/
+pygo test
 ```
 
 ## 📜 License
