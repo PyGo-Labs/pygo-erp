@@ -1,0 +1,33 @@
+{% extends "layouts/base.html" %}
+{% block title %}Productos — PyGo ERP{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-2xl font-bold text-dark">Productos</h1>
+  <a href="/productos/new" class="bg-blue text-white px-4 py-2 rounded hover:bg-blue-dark transition">
+    ➕ Nuevo Producto
+  </a>
+</div>
+
+<div class="bg-white rounded-lg shadow overflow-x-auto">
+  <table class="w-full">
+    <thead class="bg-gray-100">
+      <tr>
+        <th class="px-4 py-2 text-left">Código</th>
+        <th class="px-4 py-2 text-left">Nombre</th>
+        <th class="px-4 py-2 text-right">Precio</th>
+        <th class="px-4 py-2 text-center">Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="productos-list">
+      <!-- Loaded via HTMX -->
+    </tbody>
+  </table>
+</div>
+
+<script>
+  htmx.on('htmx:loaded', function() {
+    htmx.get('/api/productos/table', { swap: 'innerHTML', target: '#productos-list' });
+  });
+</script>
+{% endblock %}

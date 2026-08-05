@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}PyGo ERP{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            blue: '#2563EB',
+            green: '#10B981',
+            yellow: '#F59E0B',
+            dark: '#0F172A',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+  <!-- HTMX WebSocket for real-time updates -->
+  <div id="app">
+    <!-- Navbar -->
+    <nav class="bg-dark text-white px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-4">
+        <a href="/" class="text-xl font-bold text-white">PyGo ERP</a>
+        <a href="/" class="hover:text-yellow transition-colors">Dashboard</a>
+        <a href="/productos" class="hover:text-yellow transition-colors">Productos</a>
+        <a href="/clientes" class="hover:text-yellow transition-colors">Clientes</a>
+        <a href="/facturas" class="hover:text-yellow transition-colors">Facturas</a>
+      </div>
+      <div class="flex items-center space-x-3">
+        <span class="text-sm">👤 Admin User</span>
+        <button class="bg-blue hover:bg-blue-dark text-white px-3 py-1 rounded">⚙️</button>
+      </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="container mx-auto px-4 py-6">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>
