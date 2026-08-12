@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -92,10 +93,22 @@ func registerRoutes(app *web.App) {
 	// POST /api/productos — crea un producto
 	r.Handle("POST", "/api/productos", func(ctx map[string]interface{}) (interface{}, error) {
 		nombre, _ := ctx["nombre"].(string)
-		precio, _ := ctx["precio"].(float64)
+		precioRaw, ok := ctx["precio"]
+		var precio float64
+		if !ok {
+			return map[string]interface{}{"error": "precio is required"}, nil
+		}
+		switch v := precioRaw.(type) {
+		case float64:
+			precio = v
+		case string:
+			fmt.Sscanf(v, "%f", &precio)
+		}
+		codigo, _ := ctx["codigo"].(string)
 		return app.Call("core.services.productos.create", map[string]interface{}{
 			"nombre": nombre,
 			"precio": precio,
+			"codigo": codigo,
 		})
 	}, true, false)
 

@@ -1,0 +1,7 @@
+# PyGo ERP .gitignore
+storage/
+*.sock
+.pygo-server
+__pycache__/
+*.pyc
+.pygo.sock

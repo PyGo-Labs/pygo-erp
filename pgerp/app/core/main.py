@@ -81,11 +81,24 @@ def productos_list(**kwargs):
 def productos_create(**data):
     """Create a new producto."""
     db = get_db()
-    cols = ", ".join(data.keys())
-    placeholders = ", ".join("?" for _ in data)
-    db.execute(f"INSERT INTO productos ({cols}) VALUES ({placeholders})", list(data.values()))
+    # Map API field names to DB columns + type cast
+    field_map = {"precio": "precio_unitario", "codigo": "codigo", "nombre": "nombre"}
+    type_casts = {"precio_unitario": float, "codigo": str, "nombre": str}
+    mapped = {}
+    for k, v in data.items():
+        col = field_map.get(k, k)
+        cast = type_casts.get(col, str)
+        try:
+            mapped[col] = cast(v)
+        except (ValueError, TypeError):
+            mapped[col] = v  # keep as-is if cast fails
+    cols = ", ".join(mapped.keys())
+    placeholders = ", ".join("?" for _ in mapped)
+    db.execute(f"INSERT INTO productos ({cols}) VALUES ({placeholders})", list(mapped.values()))
     db.commit()
-    return {"id": db.execute("SELECT last_insert_rowid()").fetchone()[0], **data}
+    result = {"id": db.execute("SELECT last_insert_rowid()").fetchone()[0]}
+    result.update(mapped)
+    return result
 
 @register("core.services.clientes.list")
 def clientes_list(**kwargs):
