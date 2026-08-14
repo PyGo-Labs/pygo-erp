@@ -1,12 +1,8 @@
-// Package main — PyGo ERP entry point (Go web orchestrator layer).
-// Starts the Go HTTP server, initializes the UDS bridge to Python,
-// and serves routes. Python handles all business logic via app.Call().
 package main
 
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 
 	"pygo-framework/web"
@@ -23,9 +19,8 @@ func main() {
 
 	registerRoutes(app)
 
-	log.Println("PyGo ERP — dual-language architecture ready")
-	log.Println("  Go:    HTTP server on :8080")
-	log.Printf("  Python: UDS bridge at %s\n", socketPath)
+	log.Println("PyGo ERP — V2.0 native dual-language ready")
+	log.Printf("  Python: UDS bridge at %s", socketPath)
 
 	if err := app.Run(":8080"); err != nil {
 		log.Fatalf("PyGo server error: %v", err)
@@ -35,8 +30,7 @@ func main() {
 func registerRoutes(app *web.App) {
 	r := app.Router()
 
-	// --- Go-native routes (no Python bridge needed) ---
-
+	// --- Health ---
 	r.Handle("GET", "/health", func(ctx map[string]interface{}) (interface{}, error) {
 		return map[string]interface{}{
 			"status":    "ok",
@@ -45,133 +39,123 @@ func registerRoutes(app *web.App) {
 		}, nil
 	}, false, false)
 
+	// --- Dashboard (HTML) ---
 	r.Handle("GET", "/", func(ctx map[string]interface{}) (interface{}, error) {
-		html := `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>PyGo ERP — Native Dual-Language</title>
-  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
-  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <div class="container mx-auto p-6">
-    <h1 class="text-3xl font-bold text-blue-600 mb-4">PyGo ERP</h1>
-    <p class="text-gray-600 mb-4">Dual-Language Architecture — Go + Python</p>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <div class="bg-white p-4 rounded shadow">
-        <h3 class="font-semibold text-gray-700">Productos</h3>
-        <p class="text-2xl text-blue-600" id="productos-count">Cargando...</p>
-      </div>
-      <div class="bg-white p-4 rounded shadow">
-        <h3 class="font-semibold text-gray-700">Clientes</h3>
-        <p class="text-2xl text-green-600" id="clientes-count">Cargando...</p>
-      </div>
-      <div class="bg-white p-4 rounded shadow">
-        <h3 class="font-semibold text-gray-700">Facturas</h3>
-        <p class="text-2xl text-yellow-600" id="facturas-count">Cargando...</p>
-      </div>
-      <div class="bg-white p-4 rounded shadow">
-        <h3 class="font-semibold text-gray-700">Status</h3>
-        <p class="text-2xl text-purple-600">Active</p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`
-		return html, nil
+		return loadTemplate("app/views/dashboard.html"), nil
 	}, false, false)
 
-	// --- REST API routes (delegate to Python handlers via bridge) ---
+	// --- HTML Views ---
+	r.Handle("GET", "/productos", func(ctx map[string]interface{}) (interface{}, error) {
+		return loadTemplate("app/views/productos.html"), nil
+	}, false, false)
 
-	// GET /api/productos — lista productos
+	r.Handle("GET", "/clientes", func(ctx map[string]interface{}) (interface{}, error) {
+		return loadTemplate("app/views/clientes.html"), nil
+	}, false, false)
+
+	r.Handle("GET", "/facturas", func(ctx map[string]interface{}) (interface{}, error) {
+		return loadTemplate("app/views/facturas.html"), nil
+	}, false, false)
+
+	// --- REST API: Productos CRUD ---
 	r.Handle("GET", "/api/productos", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.services.productos.list", map[string]interface{}{})
-	}, true, false)
+	}, false, false)
 
-	// POST /api/productos — crea un producto
-	r.Handle("POST", "/api/productos", func(ctx map[string]interface{}) (interface{}, error) {
-		nombre, _ := ctx["nombre"].(string)
-		precioRaw, ok := ctx["precio"]
-		var precio float64
-		if !ok {
-			return map[string]interface{}{"error": "precio is required"}, nil
-		}
-		switch v := precioRaw.(type) {
-		case float64:
-			precio = v
-		case string:
-			fmt.Sscanf(v, "%f", &precio)
-		}
-		codigo, _ := ctx["codigo"].(string)
-		return app.Call("core.services.productos.create", map[string]interface{}{
-			"nombre": nombre,
-			"precio": precio,
-			"codigo": codigo,
-		})
-	}, true, false)
-
-	// GET /api/clientes — lista clientes
-	r.Handle("GET", "/api/clientes", func(ctx map[string]interface{}) (interface{}, error) {
-		return app.Call("core.services.clientes.list", map[string]interface{}{})
-	}, true, false)
-
-	// GET /api/facturas — lista facturas
-	r.Handle("GET", "/api/facturas", func(ctx map[string]interface{}) (interface{}, error) {
-		return app.Call("core.services.facturas.list", map[string]interface{}{})
-	}, true, false)
-
-	// --- HTML views (HTMX + pygo-ui components) ---
-
-	r.Handle("GET", "/productos", func(ctx map[string]interface{}) (interface{}, error) {
-		// Fetch data from Python, render HTML template
+	r.Handle("GET", "/api/productos-table", func(ctx map[string]interface{}) (interface{}, error) {
 		result, err := app.Call("core.services.productos.list", map[string]interface{}{})
 		if err != nil {
 			return nil, err
 		}
-		html := renderProductosTable(result)
-		return html, nil
+		return renderProductosRows(result), nil
+	}, false, false)
+
+	r.Handle("GET", "/api/productos/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.productos.find", map[string]interface{}{"id": ctx["id"]})
+	}, false, false)
+
+	r.Handle("POST", "/api/productos", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.productos.create", ctx)
+	}, false, false)
+
+	r.Handle("PUT", "/api/productos/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		ctx["id"] = ctx["id"]
+		return app.Call("core.services.productos.update", ctx)
+	}, false, false)
+
+	r.Handle("DELETE", "/api/productos/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.productos.delete", map[string]interface{}{"id": ctx["id"]})
+	}, false, false)
+
+	// --- REST API: Clientes CRUD ---
+	r.Handle("GET", "/api/clientes", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.clientes.list", map[string]interface{}{})
+	}, false, false)
+
+	r.Handle("GET", "/api/clientes/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.clientes.find", map[string]interface{}{"id": ctx["id"]})
+	}, false, false)
+
+	r.Handle("POST", "/api/clientes", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.clientes.create", ctx)
+	}, false, false)
+
+	r.Handle("PUT", "/api/clientes/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.clientes.update", ctx)
+	}, false, false)
+
+	r.Handle("DELETE", "/api/clientes/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.clientes.delete", map[string]interface{}{"id": ctx["id"]})
+	}, false, false)
+
+	// --- REST API: Facturas CRUD ---
+	r.Handle("GET", "/api/facturas", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.facturas.list", map[string]interface{}{})
+	}, false, false)
+
+	r.Handle("GET", "/api/facturas/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.facturas.find", map[string]interface{}{"id": ctx["id"]})
+	}, false, false)
+
+	r.Handle("POST", "/api/facturas", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.facturas.create", ctx)
+	}, false, false)
+
+	r.Handle("PUT", "/api/facturas/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.facturas.update", ctx)
+	}, false, false)
+
+	r.Handle("DELETE", "/api/facturas/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.services.facturas.delete", map[string]interface{}{"id": ctx["id"]})
 	}, false, false)
 }
 
-// renderProductosTable renders an HTMX-compatible table using pygo-ui components.
-func renderProductosTable(data interface{}) string {
-	html := `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Productos — PyGo ERP</title>
-  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <div class="container mx-auto p-6">
-    <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-bold text-blue-600">Productos</h1>
-      <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-              hx-post="/api/productos"
-              hx-include="#new-product-form">
-        Nuevo Producto
-      </button>
-    </div>
-    <div class="bg-white rounded shadow overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Precio</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200">
-        </tbody>
-      </table>
-    </div>
-  </div>
-</body>
-</html>`
-	return html
+// loadTemplate reads an HTML file.
+func loadTemplate(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("Error loading template: %v", err)
+	}
+	return string(data)
 }
 
-var _ = http.StatusOK
+// renderProductosRows renders producto rows as HTML for HTMX.
+func renderProductosRows(data interface{}) string {
+	items, ok := data.([]interface{})
+	if !ok {
+		return ""
+	}
+	var rows string
+	for _, item := range items {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id := m["id"]
+		codigo := m["codigo"]
+		nombre := m["nombre"]
+		precio := m["precio_unitario"]
+		rows += fmt.Sprintf(`<tr><td class="px-6 py-4">%v</td><td class="px-6 py-4">%v</td><td class="px-6 py-4">%v</td><td class="px-6 py-4">$%.2f</td><td class="px-6 py-4"><button hx-delete="/api/productos/%v" hx-target="#productos-table" hx-confirm="Eliminar producto?">Eliminar</button></td></tr>`, id, codigo, nombre, precio, id)
+	}
+	return rows
+}
