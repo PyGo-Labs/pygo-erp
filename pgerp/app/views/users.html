@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Usuarios — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="pygo-header"><a href="/" class="text-[#2563EB] font-bold">← Dashboard</a></nav>
+  <div class="container mx-auto p-6">
+    <h1 class="text-2xl font-bold text-[#2563EB] mb-4">👥 Usuarios</h1>
+    
+    <!-- Create User -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+      <h2 class="text-lg font-semibold mb-3">Nuevo Usuario</h2>
+      <form class="grid grid-cols-1 md:grid-cols-5 gap-4"
+            hx-post="/api/auth/users"
+            hx-target="#users-table"
+            hx-swap="innerHTML"
+            hx-on::after-request="this.reset()">
+        <input type="email" name="email" placeholder="Email" required class="px-3 py-2 border rounded">
+        <input type="password" name="password" placeholder="Password" required class="px-3 py-2 border rounded">
+        <input type="text" name="full_name" placeholder="Nombre completo" class="px-3 py-2 border rounded">
+        <select name="role" class="px-3 py-2 border rounded">
+          <option value="user">Usuario</option>
+          <option value="manager">Manager</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button type="submit" class="bg-[#10B981] hover:bg-green-700 text-white px-4 py-2 rounded">Crear</button>
+      </form>
+    </div>
+
+    <!-- Users List -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Compañía</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="users-table" class="divide-y divide-gray-200"
+               hx-get="/api/auth/users"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+          <tr><td colspan="6" class="px-6 py-4 text-center text-gray-400">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

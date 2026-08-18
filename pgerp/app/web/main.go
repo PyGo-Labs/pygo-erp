@@ -61,6 +61,43 @@ func registerRoutes(app *web.App) {
 		return loadTemplate("app/views/login.html"), nil
 	}, false, false)
 
+	r.Handle("GET", "/companies", func(ctx map[string]interface{}) (interface{}, error) {
+		return loadTemplate("app/views/companies.html"), nil
+	}, false, false)
+
+	r.Handle("GET", "/users", func(ctx map[string]interface{}) (interface{}, error) {
+		return loadTemplate("app/views/users.html"), nil
+	}, false, false)
+
+	// --- Tenancy API ---
+	r.Handle("GET", "/api/tenancy/companies", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tenancy.companies.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/tenancy/companies", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tenancy.companies.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/tenancy/companies/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tenancy.companies.update", ctx)
+	}, true, false)
+
+	r.Handle("DELETE", "/api/tenancy/companies/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tenancy.companies.delete", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/tenancy/switch", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tenancy.switch", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/tenancy/current", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tenancy.current", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/tenancy/users/transfer", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tenancy.users.transfer", ctx)
+	}, true, false)
+
 	// --- Auth API ---
 	r.Handle("POST", "/api/auth/login", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.auth.login", ctx)

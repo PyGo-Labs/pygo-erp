@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Compañías — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="pygo-header"><a href="/" class="text-[#2563EB] font-bold">← Dashboard</a></nav>
+  <div class="container mx-auto p-6">
+    <h1 class="text-2xl font-bold text-[#2563EB] mb-4">🏢 Compañías</h1>
+    
+    <!-- Create Company -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+      <h2 class="text-lg font-semibold mb-3">Nueva Compañía</h2>
+      <form class="grid grid-cols-1 md:grid-cols-3 gap-4"
+            hx-post="/api/tenancy/companies"
+            hx-target="#companies-table"
+            hx-swap="innerHTML"
+            hx-on::after-request="this.reset()">
+        <input type="text" name="name" placeholder="Nombre" required class="px-3 py-2 border rounded">
+        <input type="text" name="slug" placeholder="Slug (opcional)" class="px-3 py-2 border rounded">
+        <button type="submit" class="bg-[#10B981] hover:bg-green-700 text-white px-4 py-2 rounded">Crear</button>
+      </form>
+    </div>
+
+    <!-- Companies List -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Slug</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="companies-table" class="divide-y divide-gray-200"
+               hx-get="/api/tenancy/companies"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+          <tr><td colspan="5" class="px-6 py-4 text-center text-gray-400">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

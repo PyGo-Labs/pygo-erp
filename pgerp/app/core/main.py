@@ -37,6 +37,9 @@ from core.auth import User, Company, Session, hash_password
 # --- Auth handlers ---
 from core import auth_handlers
 
+# --- Tenancy ---
+from core import tenancy
+
 # --- Models ---
 
 class BaseModel:

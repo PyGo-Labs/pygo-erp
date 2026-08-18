@@ -15,7 +15,8 @@
     <form id="login-form" class="space-y-4"
           hx-post="/api/auth/login"
           hx-target="#login-result"
-          hx-swap="innerHTML">
+          hx-swap="innerHTML"
+          hx-on::after-request="handleLogin(event)">
       <div>
         <label class="block text-sm font-medium text-gray-700">Email</label>
         <input type="email" name="email" required 
@@ -39,6 +40,30 @@
     <p class="mt-6 text-xs text-gray-400 text-center">
       Demo: admin@demo.com / admin123
     </p>
+  </div>
+  
+  <script>
+    // Save token on login success
+    function handleLogin(event) {
+      if (event.detail.successful) {
+        try {
+          const data = JSON.parse(event.detail.xhr.responseText);
+          if (data.result && data.result.token) {
+            localStorage.setItem('pygo_token', data.result.token);
+            window.location.href = '/';
+          }
+        } catch(e) {}
+      }
+    }
+    
+    // Add token to all HTMX requests
+    document.body.addEventListener('htmx:configRequest', function(event) {
+      const token = localStorage.getItem('pygo_token');
+      if (token) {
+        event.detail.parameters['token'] = token;
+      }
+    });
+  </script>
   </div>
 </body>
 </html>
