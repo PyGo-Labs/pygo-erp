@@ -52,6 +52,12 @@ from core import accounting
 # --- CRM ---
 from core import crm
 
+# --- Projects ---
+from core import projects
+
+# --- Reports ---
+from core import reports
+
 # --- Models ---
 
 class BaseModel:
@@ -511,6 +517,51 @@ def init_db():
             related_type TEXT,
             related_id INTEGER,
             user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+    """)
+    db.commit()
+    
+    # Projects tables
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'planning' CHECK(status IN ('planning', 'in_progress', 'completed', 'cancelled')),
+            start_date TEXT,
+            end_date TEXT,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            assigned_to INTEGER,
+            priority TEXT DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+            status TEXT DEFAULT 'todo' CHECK(status IN ('todo', 'in_progress', 'done', 'cancelled')),
+            due_date TEXT,
+            completed_at TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS timesheets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            user_id INTEGER,
+            hours REAL NOT NULL,
+            description TEXT,
+            date TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS milestones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            due_date TEXT,
+            completed INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         );
     """)

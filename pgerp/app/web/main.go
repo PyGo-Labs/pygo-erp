@@ -298,6 +298,112 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.crm.dashboard", ctx)
 	}, false, false)
 
+	// --- Projects API ---
+	r.Handle("GET", "/api/projects", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/projects", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/projects/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.update", ctx)
+	}, true, false)
+
+	r.Handle("DELETE", "/api/projects/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.delete", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/projects/tasks", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.tasks.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/projects/tasks", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.tasks.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/projects/tasks/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.tasks.update", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/projects/tasks/{id}/complete", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.tasks.complete", ctx)
+	}, true, false)
+
+	r.Handle("DELETE", "/api/projects/tasks/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.tasks.delete", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/projects/timesheets", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.timesheets.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/projects/timesheets", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.timesheets.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/projects/timesheets/summary", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.timesheets.summary", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/projects/milestones", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.milestones.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/projects/milestones", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.milestones.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/projects/dashboard", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.dashboard", ctx)
+	}, false, false)
+
+	// --- Reports API ---
+	r.Handle("GET", "/api/reports/dashboard", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.dashboard", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/sales/by-period", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.sales.by_period", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/sales/top-products", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.sales.top_products", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/sales/top-clients", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.sales.top_clients", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/inventory/stock", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.inventory.stock_status", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/inventory/movements", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.inventory.movements", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/financial/cashflow", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.financial.cashflow", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/crm/conversion", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.crm.conversion", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/crm/activities", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.crm.activity_summary", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/projects/progress", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.projects.progress", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/export", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.export", ctx)
+	}, false, false)
+
 	// --- Auth API ---
 	r.Handle("POST", "/api/auth/login", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.auth.login", ctx)
