@@ -1,0 +1,20 @@
+# PyGo ERP V2.0 — Requirements
+
+# Core
+msgpack>=1.0.0
+
+# Web framework (Go - no Python deps needed)
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-asyncio>=0.21.0
+
+# Optional: for file uploads
+# python-multipart>=0.0.6
+
+# Optional: for i18n
+# babel>=2.12.0
+
+# Optional: for Redis cache
+# redis>=5.0.0

@@ -58,6 +58,12 @@ from core import projects
 # --- Reports ---
 from core import reports
 
+# --- i18n ---
+from core import i18n_handlers
+
+# --- Files ---
+from core import files
+
 # --- Models ---
 
 class BaseModel:
@@ -469,6 +475,23 @@ def init_db():
             debit REAL DEFAULT 0,
             credit REAL DEFAULT 0,
             description TEXT
+        );
+    """)
+    db.commit()
+    
+    # File upload table
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            original_name TEXT,
+            mime_type TEXT,
+            size INTEGER DEFAULT 0,
+            path TEXT NOT NULL,
+            related_type TEXT,
+            related_id INTEGER,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
         );
     """)
     db.commit()

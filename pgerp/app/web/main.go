@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"pygo-framework/observability"
 	"pygo-framework/web"
 )
 
@@ -37,6 +38,10 @@ func registerRoutes(app *web.App) {
 			"runtime":   "hybrid",
 			"languages": []string{"go", "python"},
 		}, nil
+	}, false, false)
+
+	r.Handle("GET", "/metrics", func(ctx map[string]interface{}) (interface{}, error) {
+		return observability.GetMetrics(), nil
 	}, false, false)
 
 	// --- Dashboard (HTML) ---
@@ -400,9 +405,44 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.reports.projects.progress", ctx)
 	}, false, false)
 
-	r.Handle("GET", "/api/reports/export", func(ctx map[string]interface{}) (interface{}, error) {
-		return app.Call("core.reports.export", ctx)
+	r.Handle("GET", "/api/projects/dashboard", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.projects.dashboard", ctx)
 	}, false, false)
+
+	// --- i18n API ---
+	r.Handle("GET", "/api/i18n/langs", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.i18n.langs", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/i18n/set", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.i18n.set", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/i18n/translate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.i18n.translate", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/i18n/all", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.i18n.all", ctx)
+	}, false, false)
+
+	// --- File Upload API ---
+	r.Handle("GET", "/api/files", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.files.list", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/files/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.files.get", ctx)
+	}, false, false)
+
+	r.Handle("DELETE", "/api/files/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.files.delete", ctx)
+	}, true, false)
+
+	// --- WebSocket: real-time notifications ---
+	r.Handle("GET", "/ws", func(ctx map[string]interface{}) (interface{}, error) {
+		return map[string]interface{}{"status": "use WebSocket protocol at /ws"}, nil
+	}, false, true)
 
 	// --- Auth API ---
 	r.Handle("POST", "/api/auth/login", func(ctx map[string]interface{}) (interface{}, error) {
