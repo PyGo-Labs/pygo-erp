@@ -43,6 +43,9 @@ from core import tenancy
 # --- Inventory ---
 from core import inventory
 
+# --- Sales ---
+from core import sales
+
 # --- Models ---
 
 class BaseModel:
@@ -368,6 +371,65 @@ def init_db():
     except:
         db.execute("ALTER TABLE productos ADD COLUMN stock_minimo REAL")
         db.commit()
+    
+    # Sales tables
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS sales_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'confirmed', 'delivered', 'invoiced', 'cancelled')),
+            subtotal REAL DEFAULT 0,
+            tax REAL DEFAULT 0,
+            total REAL DEFAULT 0,
+            notes TEXT,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS sales_order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            quantity REAL DEFAULT 1,
+            precio_unitario REAL DEFAULT 0,
+            discount REAL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_name TEXT,
+            status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'received', 'cancelled')),
+            subtotal REAL DEFAULT 0,
+            tax REAL DEFAULT 0,
+            total REAL DEFAULT 0,
+            notes TEXT,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS purchase_order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            quantity REAL DEFAULT 1,
+            precio_unitario REAL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS quotes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'draft',
+            subtotal REAL DEFAULT 0,
+            tax REAL DEFAULT 0,
+            total REAL DEFAULT 0,
+            valid_until TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS quote_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_id INTEGER NOT NULL,
+            producto_id INTEGER NOT NULL,
+            quantity REAL DEFAULT 1,
+            precio_unitario REAL DEFAULT 0
+        );
+    """)
+    db.commit()
     
     # Seed
     if db.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:

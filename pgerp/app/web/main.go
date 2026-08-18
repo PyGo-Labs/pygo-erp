@@ -143,6 +143,55 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.inventory.categories.create", ctx)
 	}, true, false)
 
+	// --- Sales API ---
+	r.Handle("GET", "/api/sales/orders", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.orders.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/sales/orders", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.orders.create", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/sales/orders/{id}/confirm", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.orders.confirm", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/sales/orders/{id}/deliver", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.orders.deliver", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/sales/orders/{id}/invoice", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.orders.invoice", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/sales/orders/{id}/cancel", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.orders.cancel", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/sales/purchase", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.purchase.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/sales/purchase", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.purchase.create", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/sales/purchase/{id}/receive", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.purchase.receive", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/sales/quotes", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.quotes.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/sales/quotes", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.quotes.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/sales/summary", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales.summary", ctx)
+	}, false, false)
+
 	// --- Auth API ---
 	r.Handle("POST", "/api/auth/login", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.auth.login", ctx)
