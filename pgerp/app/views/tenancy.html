@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Tenancy — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="pygo-header"><a href="/" class="text-[#2563EB] font-bold">← Dashboard</a></nav>
+  <div class="container mx-auto p-6">
+    <h1 class="text-2xl font-bold text-[#2563EB] mb-4">🏢 Multi-Tenancy</h1>
+
+    <!-- Current Tenant -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+      <h2 class="text-lg font-semibold mb-3">Tenant Actual</h2>
+      <div id="current-tenant" class="text-sm"
+           hx-get="/api/tenancy/current"
+           hx-trigger="load">
+        Cargando...
+      </div>
+    </div>
+
+    <!-- Companies -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white rounded-lg shadow p-4">
+        <h2 class="text-lg font-semibold mb-3">Crear Compañía</h2>
+        <form class="space-y-3"
+              hx-post="/api/tenancy/companies"
+              hx-target="#companies-list"
+              hx-swap="innerHTML"
+              hx-on::after-request="this.reset()">
+          <input type="text" name="name" placeholder="Nombre" required class="w-full px-3 py-2 border rounded">
+          <input type="text" name="slug" placeholder="Slug (opcional)" class="w-full px-3 py-2 border rounded">
+          <button type="submit" class="w-full bg-[#10B981] text-white py-2 rounded">Crear</button>
+        </form>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-4">
+        <h2 class="text-lg font-semibold mb-3">Compañías</h2>
+        <div id="companies-list" class="space-y-2 text-sm"
+             hx-get="/api/tenancy/companies"
+             hx-trigger="load">
+          Cargando...
+        </div>
+      </div>
+    </div>
+
+    <!-- Switch Company -->
+    <div class="bg-white rounded-lg shadow p-4 mt-6">
+      <h2 class="text-lg font-semibold mb-3">Cambiar de Compañía</h2>
+      <form class="flex gap-4"
+            hx-post="/api/tenancy/switch"
+            hx-target="#switch-result"
+            hx-swap="innerHTML">
+        <select name="company_id" class="px-3 py-2 border rounded flex-1">
+          <option value="1">Demo Company</option>
+        </select>
+        <button type="submit" class="bg-[#2563EB] text-white px-4 py-2 rounded">Cambiar</button>
+      </form>
+      <div id="switch-result" class="mt-2 text-sm"></div>
+    </div>
+  </div>
+</body>
+</html>

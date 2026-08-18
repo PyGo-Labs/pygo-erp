@@ -46,6 +46,9 @@ from core import inventory
 # --- Sales ---
 from core import sales
 
+# --- Accounting ---
+from core import accounting
+
 # --- Models ---
 
 class BaseModel:
@@ -430,6 +433,41 @@ def init_db():
         );
     """)
     db.commit()
+    
+    # Accounting tables
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT CHECK(type IN ('asset', 'liability', 'equity', 'revenue', 'expense')),
+            parent_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS journal_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            description TEXT,
+            debit_total REAL DEFAULT 0,
+            credit_total REAL DEFAULT 0,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS journal_entry_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_id INTEGER NOT NULL,
+            account_id INTEGER NOT NULL,
+            debit REAL DEFAULT 0,
+            credit REAL DEFAULT 0,
+            description TEXT
+        );
+    """)
+    db.commit()
+    
+    # Seed chart of accounts
+    if db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0:
+        from core.accounting import accounts_seed
+        accounts_seed()
     
     # Seed
     if db.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:

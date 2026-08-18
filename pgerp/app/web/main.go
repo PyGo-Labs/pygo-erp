@@ -61,6 +61,10 @@ func registerRoutes(app *web.App) {
 		return loadTemplate("app/views/login.html"), nil
 	}, false, false)
 
+	r.Handle("GET", "/tenancy", func(ctx map[string]interface{}) (interface{}, error) {
+		return loadTemplate("app/views/tenancy.html"), nil
+	}, false, false)
+
 	r.Handle("GET", "/companies", func(ctx map[string]interface{}) (interface{}, error) {
 		return loadTemplate("app/views/companies.html"), nil
 	}, false, false)
@@ -190,6 +194,47 @@ func registerRoutes(app *web.App) {
 
 	r.Handle("GET", "/api/sales/summary", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.sales.summary", ctx)
+	}, false, false)
+
+	// --- Accounting API ---
+	r.Handle("GET", "/api/accounting/accounts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.accounts.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/accounts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.accounts.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/accounts/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.accounts.detail", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/accounts/seed", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.accounts.seed", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/journal", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.journal.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/journal", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.journal.create", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/accounting/journal/from-sale/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.journal.from_sale", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/trial-balance", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.trial_balance", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/accounting/income-statement", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.income_statement", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/accounting/balance-sheet", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.balance_sheet", ctx)
 	}, false, false)
 
 	// --- Auth API ---
