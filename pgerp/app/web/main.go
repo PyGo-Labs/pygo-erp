@@ -57,6 +57,39 @@ func registerRoutes(app *web.App) {
 		return loadTemplate("app/views/facturas.html"), nil
 	}, false, false)
 
+	r.Handle("GET", "/login", func(ctx map[string]interface{}) (interface{}, error) {
+		return loadTemplate("app/views/login.html"), nil
+	}, false, false)
+
+	// --- Auth API ---
+	r.Handle("POST", "/api/auth/login", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.auth.login", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/auth/logout", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.auth.logout", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/auth/me", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.auth.me", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/auth/users", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.auth.users.list", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/auth/users", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.auth.users.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/auth/users/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.auth.users.update", ctx)
+	}, true, false)
+
+	r.Handle("DELETE", "/api/auth/users/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.auth.users.delete", ctx)
+	}, true, false)
+
 	// --- REST API: Productos CRUD ---
 	r.Handle("GET", "/api/productos", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.services.productos.list", map[string]interface{}{})
@@ -79,7 +112,6 @@ func registerRoutes(app *web.App) {
 	}, false, false)
 
 	r.Handle("PUT", "/api/productos/{id}", func(ctx map[string]interface{}) (interface{}, error) {
-		ctx["id"] = ctx["id"]
 		return app.Call("core.services.productos.update", ctx)
 	}, false, false)
 

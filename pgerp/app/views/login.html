@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="max-w-md w-full bg-white rounded-lg shadow-md p-8">
+    <h1 class="text-2xl font-bold text-[#2563EB] text-center mb-6">PyGo ERP V2.0</h1>
+    <h2 class="text-lg text-gray-600 text-center mb-4">Iniciar Sesión</h2>
+    
+    <form id="login-form" class="space-y-4"
+          hx-post="/api/auth/login"
+          hx-target="#login-result"
+          hx-swap="innerHTML">
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Email</label>
+        <input type="email" name="email" required 
+               class="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+               placeholder="admin@demo.com">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Password</label>
+        <input type="password" name="password" required
+               class="mt-1 block w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+               placeholder="••••••••">
+      </div>
+      <button type="submit" 
+              class="w-full bg-[#2563EB] hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        Entrar
+      </button>
+    </form>
+    
+    <div id="login-result" class="mt-4"></div>
+    
+    <p class="mt-6 text-xs text-gray-400 text-center">
+      Demo: admin@demo.com / admin123
+    </p>
+  </div>
+</body>
+</html>
