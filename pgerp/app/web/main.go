@@ -237,6 +237,67 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.accounting.balance_sheet", ctx)
 	}, false, false)
 
+	// --- CRM API ---
+	r.Handle("GET", "/api/crm/leads", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.leads.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/crm/leads", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.leads.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/crm/leads/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.leads.update", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/crm/leads/{id}/convert", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.leads.convert", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/crm/opportunities", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.opportunities.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/crm/opportunities", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.opportunities.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/crm/opportunities/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.opportunities.update", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/crm/opportunities/{id}/won", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.opportunities.won", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/crm/opportunities/{id}/lost", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.opportunities.lost", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/crm/pipeline/summary", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.pipeline.summary", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/crm/pipeline/funnel", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.pipeline.funnel", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/crm/activities", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.activities.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/crm/activities", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.activities.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/crm/contacts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.contacts.list", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/crm/dashboard", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.crm.dashboard", ctx)
+	}, false, false)
+
 	// --- Auth API ---
 	r.Handle("POST", "/api/auth/login", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.auth.login", ctx)

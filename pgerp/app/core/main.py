@@ -49,6 +49,9 @@ from core import sales
 # --- Accounting ---
 from core import accounting
 
+# --- CRM ---
+from core import crm
+
 # --- Models ---
 
 class BaseModel:
@@ -468,6 +471,50 @@ def init_db():
     if db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0:
         from core.accounting import accounts_seed
         accounts_seed()
+    
+    # CRM tables
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            company TEXT,
+            source TEXT,
+            notes TEXT,
+            status TEXT DEFAULT 'new' CHECK(status IN ('new', 'contacted', 'qualified', 'converted', 'lost')),
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS opportunities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            company TEXT,
+            contact_name TEXT,
+            contact_email TEXT,
+            contact_phone TEXT,
+            value REAL DEFAULT 0,
+            stage TEXT DEFAULT 'prospecting' CHECK(stage IN ('prospecting', 'qualification', 'proposal', 'negotiation', 'qualified', 'won', 'lost')),
+            probability INTEGER DEFAULT 50,
+            source TEXT,
+            expected_close_date TEXT,
+            user_id INTEGER,
+            lead_id INTEGER,
+            notes TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS activities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT CHECK(type IN ('call', 'email', 'meeting', 'note', 'task')),
+            subject TEXT NOT NULL,
+            description TEXT,
+            related_type TEXT,
+            related_id INTEGER,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+    """)
+    db.commit()
     
     # Seed
     if db.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:
