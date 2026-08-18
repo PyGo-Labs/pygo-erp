@@ -98,6 +98,51 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.tenancy.users.transfer", ctx)
 	}, true, false)
 
+	// --- Inventory API ---
+	r.Handle("GET", "/api/inventory/warehouses", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.warehouses.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/inventory/warehouses", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.warehouses.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/inventory/warehouses/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.warehouses.update", ctx)
+	}, true, false)
+
+	r.Handle("DELETE", "/api/inventory/warehouses/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.warehouses.delete", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/inventory/stock", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.stock.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/inventory/stock/transfer", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.stock.transfer", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/inventory/stock/adjust", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.stock.adjust", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/inventory/stock/movements", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.stock.movements", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/inventory/stock/alerts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.stock.alerts", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/inventory/categories", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.categories.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/inventory/categories", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.inventory.categories.create", ctx)
+	}, true, false)
+
 	// --- Auth API ---
 	r.Handle("POST", "/api/auth/login", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.auth.login", ctx)

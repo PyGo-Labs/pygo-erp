@@ -40,6 +40,9 @@ from core import auth_handlers
 # --- Tenancy ---
 from core import tenancy
 
+# --- Inventory ---
+from core import inventory
+
 # --- Models ---
 
 class BaseModel:
@@ -321,6 +324,50 @@ def init_db():
     User.create_table(db)
     Company.create_table(db)
     Session.create_table(db)
+    
+    # Inventory tables
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS warehouses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            code TEXT UNIQUE,
+            location TEXT,
+            company_id INTEGER,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER NOT NULL,
+            warehouse_id INTEGER NOT NULL,
+            quantity REAL DEFAULT 0,
+            UNIQUE(producto_id, warehouse_id)
+        );
+        CREATE TABLE IF NOT EXISTS stock_movements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER NOT NULL,
+            from_warehouse_id INTEGER,
+            to_warehouse_id INTEGER,
+            quantity REAL NOT NULL,
+            type TEXT CHECK(type IN ('transfer', 'adjustment', 'sale', 'purchase')),
+            reason TEXT,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS categorias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            parent_id INTEGER
+        );
+    """)
+    db.commit()
+    
+    # Add stock_minimo column to productos if not exists
+    try:
+        db.execute("SELECT stock_minimo FROM productos LIMIT 1")
+    except:
+        db.execute("ALTER TABLE productos ADD COLUMN stock_minimo REAL")
+        db.commit()
     
     # Seed
     if db.execute("SELECT COUNT(*) FROM productos").fetchone()[0] == 0:

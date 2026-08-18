@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Inventario — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="pygo-header"><a href="/" class="text-[#2563EB] font-bold">← Dashboard</a></nav>
+  <div class="container mx-auto p-6">
+    <h1 class="text-2xl font-bold text-[#2563EB] mb-4">📦 Inventario</h1>
+
+    <!-- Warehouses -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white rounded-lg shadow p-4">
+        <h2 class="text-lg font-semibold mb-3">Almacenes</h2>
+        <form class="space-y-3 mb-4"
+              hx-post="/api/inventory/warehouses"
+              hx-target="#warehouses-list"
+              hx-swap="innerHTML"
+              hx-on::after-request="this.reset()">
+          <input type="text" name="name" placeholder="Nombre" required class="w-full px-3 py-2 border rounded">
+          <input type="text" name="location" placeholder="Ubicación" class="w-full px-3 py-2 border rounded">
+          <button type="submit" class="w-full bg-[#10B981] text-white py-2 rounded">Crear</button>
+        </form>
+        <div id="warehouses-list" class="space-y-2 text-sm"
+             hx-get="/api/inventory/warehouses"
+             hx-trigger="load">
+          Cargando...
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-4">
+        <h2 class="text-lg font-semibold mb-3">Movimientos</h2>
+        <div id="movements-list" class="text-sm space-y-1"
+             hx-get="/api/inventory/stock/movements"
+             hx-trigger="load">
+          Cargando...
+        </div>
+      </div>
+    </div>
+
+    <!-- Stock Alerts -->
+    <div class="bg-white rounded-lg shadow p-4 mt-6">
+      <h2 class="text-lg font-semibold mb-3">⚠️ Alertas de Stock</h2>
+      <div id="alerts-list" class="text-sm"
+           hx-get="/api/inventory/stock/alerts"
+           hx-trigger="load">
+        Cargando...
+      </div>
+    </div>
+  </div>
+</body>
+</html>
