@@ -504,6 +504,56 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.accounting.tax.summary", ctx)
 	}, false, false)
 
+	// --- Workflow API ---
+	r.Handle("GET", "/api/workflow/states", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.workflow.states.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/workflow/states", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.workflow.states.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/workflow/transitions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.workflow.transitions.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/workflow/transitions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.workflow.transitions.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/workflow/history", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.workflow.history.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/workflow/transition/execute", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.workflow.transition.execute", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/workflow/init/sales-order", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.workflow.init_sales_order", ctx)
+	}, true, false)
+
+	// --- Permissions API ---
+	r.Handle("GET", "/api/permissions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.permissions.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/permissions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.permissions.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/permissions/check", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.permissions.check", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/permissions/grant", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.permissions.grant_to_user", ctx)
+	}, true, false)
+
+	r.Handle("POST", "/api/permissions/revoke", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.permissions.revoke_from_user", ctx)
+	}, true, false)
+
 	// --- WebSocket: real-time notifications ---
 	r.Handle("GET", "/ws", func(ctx map[string]interface{}) (interface{}, error) {
 		return map[string]interface{}{"status": "use WebSocket protocol at /ws"}, nil

@@ -70,6 +70,12 @@ from core import accounting_real
 # --- Accounting migrations ---
 from core.migrations import accounting  # noqa: F401
 
+# --- Workflow + Permissions ---
+from core import workflow_permissions
+
+# --- Workflow migrations ---
+from core.migrations import workflow  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:
