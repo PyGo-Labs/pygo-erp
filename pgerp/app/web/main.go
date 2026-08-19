@@ -439,6 +439,71 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.files.delete", ctx)
 	}, true, false)
 
+	// --- Accounting Real: Taxes, Currencies, DIOT, Retentions ---
+	r.Handle("GET", "/api/accounting/tax-rates", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.tax_rates.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/tax-rates", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.tax_rates.create", ctx)
+	}, true, false)
+
+	r.Handle("PUT", "/api/accounting/tax-rates/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.tax_rates.update", ctx)
+	}, true, false)
+
+	r.Handle("DELETE", "/api/accounting/tax-rates/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.tax_rates.delete", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/currencies", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.currencies.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/currencies", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.currencies.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/exchange-rates", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.exchange_rates.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/exchange-rates", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.exchange_rates.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/exchange-rates/convert", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.exchange_rates.convert", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/accounting/diot/generate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.diot.generate", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/accounting/retentions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.retentions.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/retentions/calculate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.retentions.calculate", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/fiscal-periods", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.fiscal_periods.list", ctx)
+	}, false, false)
+
+	r.Handle("POST", "/api/accounting/fiscal-periods", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.fiscal_periods.create", ctx)
+	}, true, false)
+
+	r.Handle("GET", "/api/accounting/tax/calculate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.tax.calculate", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/accounting/tax/summary", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.tax.summary", ctx)
+	}, false, false)
+
 	// --- WebSocket: real-time notifications ---
 	r.Handle("GET", "/ws", func(ctx map[string]interface{}) (interface{}, error) {
 		return map[string]interface{}{"status": "use WebSocket protocol at /ws"}, nil

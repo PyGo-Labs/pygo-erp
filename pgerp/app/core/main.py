@@ -64,6 +64,12 @@ from core import i18n_handlers
 # --- Files ---
 from core import files
 
+# --- Accounting Real ---
+from core import accounting_real
+
+# --- Accounting migrations ---
+from core.migrations import accounting  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:
