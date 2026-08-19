@@ -504,6 +504,45 @@ func registerRoutes(app *web.App) {
 	r.Handle("DELETE", "/api/facturas/{id}", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.services.facturas.delete", ctx)
 	}, false)
+
+	// --- Excel Export ---
+	r.Handle("GET", "/api/export/excel", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.export.excel", ctx)
+	}, false)
+
+	// --- Notifications ---
+	r.Handle("GET", "/api/notifications/config", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.notifications.config", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/notifications/test", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.notifications.send_test", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/notifications/order-created", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.notifications.order_created", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/notifications/invoice-generated", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.notifications.invoice_generated", ctx)
+	}, false)
+
+	// --- Cache ---
+	r.Handle("GET", "/api/cache/stats", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cache.stats", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/cache/get", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cache.get", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/cache/set", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cache.set", ctx)
+	}, false)
+
+	r.Handle("DELETE", "/api/cache/clear", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cache.clear", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {

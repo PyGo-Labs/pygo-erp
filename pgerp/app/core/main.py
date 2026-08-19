@@ -81,6 +81,13 @@ from core.migrations import workflow  # noqa: F401
 
 # --- Export/Import ---
 from core import export_import
+from core import export_excel
+
+# --- Notifications ---
+from core import notifications
+
+# --- Cache ---
+from core import cache
 
 # --- Models ---
 
