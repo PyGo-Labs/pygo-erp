@@ -414,6 +414,19 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.i18n.langs", ctx)
 	}, false, false)
 
+	// --- Reports PDF ---
+	r.Handle("GET", "/api/reports/pdf/invoice", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.pdf.invoice", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/pdf/quote", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.pdf.quote", ctx)
+	}, false, false)
+
+	r.Handle("GET", "/api/reports/pdf/ticket", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reports.pdf.ticket", ctx)
+	}, false, false)
+
 	r.Handle("POST", "/api/i18n/set", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.i18n.set", ctx)
 	}, false, false)

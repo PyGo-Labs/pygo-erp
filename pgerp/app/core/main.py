@@ -58,6 +58,9 @@ from core import projects
 # --- Reports ---
 from core import reports
 
+# --- Reports PDF ---
+from core.reports import reports_pdf_invoice, reports_pdf_quote, reports_pdf_ticket
+
 # --- i18n ---
 from core import i18n_handlers
 
@@ -293,7 +296,11 @@ def handle_request(payload: bytes) -> bytes:
         fn = HANDLERS.get(method)
         if fn is None:
             return msgpack.packb({"result": None, "error": f"Handler not found: {method}"}, use_bin_type=True)
-        result = fn(**args)
+        
+        # Filter out 'token' from args (used for auth, not for DB operations)
+        filtered_args = {k: v for k, v in args.items() if k != "token"}
+        
+        result = fn(**filtered_args)
         return msgpack.packb({"result": result, "error": None}, use_bin_type=True)
     except Exception as e:
         trace = traceback.format_exc()
