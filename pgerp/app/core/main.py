@@ -300,9 +300,7 @@ def handle_request(payload: bytes) -> bytes:
         if fn is None:
             return msgpack.packb({"result": None, "error": f"Handler not found: {method}"}, use_bin_type=True)
         
-        # Filter out 'token' from args (used for auth, not for DB operations)
         filtered_args = {k: v for k, v in args.items() if k != "token"}
-        
         result = fn(**filtered_args)
         return msgpack.packb({"result": result, "error": None}, use_bin_type=True)
     except Exception as e:
