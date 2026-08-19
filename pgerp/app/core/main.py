@@ -79,6 +79,9 @@ from core import workflow_permissions
 # --- Workflow migrations ---
 from core.migrations import workflow  # noqa: F401
 
+# --- Export/Import ---
+from core import export_import
+
 # --- Models ---
 
 class BaseModel:
