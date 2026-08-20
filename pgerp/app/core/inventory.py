@@ -20,10 +20,17 @@ from core.registry import register
 
 
 def get_db():
+    """Use the request-scoped connection owned by core.main when available."""
+    try:
+        from core.main import get_db as _shared
+        return _shared()
+    except Exception:
+        pass
     import sqlite3
-    db_path = os.environ.get("PYGO_DB", "/tmp/pgerp.db")
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(os.environ.get("PYGO_DB", "/tmp/pgerp.db"), timeout=15.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
 
@@ -62,6 +69,7 @@ def warehouses_create(name=None, code=None, location=None, token=None, **kwargs)
     db.commit()
     
     row = db.execute("SELECT * FROM warehouses WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    db.close()
     return dict(row)
 
 
@@ -93,7 +101,9 @@ def warehouses_update(warehouse_id=None, token=None, **kwargs):
         db.execute(f"UPDATE warehouses SET {sets} WHERE id = ?", vals)
         db.commit()
     
-    return dict(db.execute("SELECT * FROM warehouses WHERE id = ?", (warehouse_id,)).fetchone())
+    result = dict(db.execute("SELECT * FROM warehouses WHERE id = ?", (warehouse_id,)).fetchone())
+    db.close()
+    return result
 
 
 @register("core.inventory.warehouses.delete")
@@ -118,6 +128,7 @@ def warehouses_delete(warehouse_id=None, token=None):
     
     db.execute("DELETE FROM warehouses WHERE id = ?", (warehouse_id,))
     db.commit()
+    db.close()
     return {"deleted": True, "warehouse_id": warehouse_id}
 
 
@@ -209,6 +220,7 @@ def stock_transfer(product_id=None, from_warehouse=None, to_warehouse=None, quan
         (product_id, from_warehouse, to_warehouse, qty, user.id if token else None)
     )
     db.commit()
+    db.close()
     
     return {"transferred": True, "quantity": qty}
 
@@ -258,6 +270,7 @@ def stock_adjust(product_id=None, warehouse_id=None, new_quantity=None, reason=N
         (product_id, warehouse_id, diff, user.id if token else None, reason)
     )
     db.commit()
+    db.close()
     
     return {"adjusted": True, "previous": current["quantity"] if current else 0, "new": qty}
 
@@ -324,5 +337,6 @@ def categories_create(name=None, parent_id=None, token=None, **kwargs):
     
     cursor = db.execute("INSERT INTO categorias (name, parent_id) VALUES (?, ?)", (name, parent_id))
     db.commit()
+    db.close()
     
     return {"id": cursor.lastrowid, "name": name, "parent_id": parent_id}

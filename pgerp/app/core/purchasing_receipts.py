@@ -12,13 +12,17 @@ from core.registry import register
 
 
 def get_db():
+    """Use the request-scoped connection owned by core.main when available."""
+    try:
+        from core.main import get_db as _shared
+        return _shared()
+    except Exception:
+        pass
     import sqlite3
     conn = sqlite3.connect(os.environ.get("PYGO_DB", "/tmp/pgerp.db"), timeout=15.0)
     conn.row_factory = sqlite3.Row
-    try:
-        conn.execute("PRAGMA busy_timeout=15000")
-    except Exception:
-        pass
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
 
@@ -189,6 +193,15 @@ def receipts_create(purchase_order_id=None, warehouse_id=None, lines=None, notes
                           source_type="purchase_receipt", source_id=receipt_id)
             except Exception:
                 pass  # valuation must never block a receipt
+            # Tracked products also get their lot/serial recorded
+            try:
+                from core.lots import receive_into_lot
+                receive_into_lot(db, pid, wh, qty,
+                                 lot_code=(l.get("lot_code") if isinstance(l, dict) else None),
+                                 expiry_date=(l.get("expiry_date") if isinstance(l, dict) else None),
+                                 source_type="purchase_receipt", source_id=receipt_id)
+            except Exception:
+                pass
             received_total += qty * price
 
         # recompute PO status

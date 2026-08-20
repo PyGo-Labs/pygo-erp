@@ -25,13 +25,17 @@ MODULES_DIR = os.path.join(base, "app", "modules")
 
 
 def get_db():
+    """Use the request-scoped connection owned by core.main when available."""
+    try:
+        from core.main import get_db as _shared
+        return _shared()
+    except Exception:
+        pass
     import sqlite3
     conn = sqlite3.connect(os.environ.get("PYGO_DB", "/tmp/pgerp.db"), timeout=15.0)
     conn.row_factory = sqlite3.Row
-    try:
-        conn.execute("PRAGMA busy_timeout=15000")
-    except Exception:
-        pass
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
 

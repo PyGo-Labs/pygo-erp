@@ -24,7 +24,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 # Database setup
 DB_PATH = os.environ.get("PYGO_DB", "/tmp/pgerp.db")
 
-def get_db():
+# One connection per request. Handlers historically opened their own and often
+# returned without closing it, which held the SQLite write lock and made any
+# other module fail with "database is locked". Sharing a request-scoped
+# connection fixes all of them at once; the dispatcher closes it in a finally.
+_request_conn = None
+
+
+def _new_conn():
     # timeout: wait instead of failing instantly on a busy lock
     conn = sqlite3.connect(DB_PATH, timeout=15.0)
     conn.row_factory = sqlite3.Row
@@ -36,6 +43,52 @@ def get_db():
     except Exception:
         pass
     return conn
+
+
+class _SharedConn:
+    """Proxy over the request connection whose close() is a no-op.
+
+    Handlers call db.close() at different points; on a shared connection that
+    would break whatever runs next. The dispatcher owns the real close.
+    """
+
+    __slots__ = ("_c",)
+
+    def __init__(self, conn):
+        self._c = conn
+
+    def close(self):
+        pass  # only the dispatcher closes the request connection
+
+    def __getattr__(self, name):
+        return getattr(self._c, name)
+
+
+def get_db():
+    global _request_conn
+    if _request_conn is not None:
+        return _SharedConn(_request_conn)
+    return _new_conn()
+
+
+def _open_request_conn():
+    global _request_conn
+    _request_conn = _new_conn()
+    return _request_conn
+
+
+def _close_request_conn():
+    global _request_conn
+    conn, _request_conn = _request_conn, None
+    if conn is not None:
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 # Handlers registry (shared)
 from core.registry import HANDLERS, register
@@ -147,6 +200,11 @@ from core import fiscal_periods  # noqa: F401
 from core import multicurrency  # noqa: F401
 from core.migrations import valuation as _mig_valuation  # noqa: F401
 
+# --- D2: traceability, reservations, reorder ---
+from core import lots  # noqa: F401
+from core import reservations  # noqa: F401
+from core.migrations import traceability as _mig_traceability  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:
@@ -177,12 +235,17 @@ class BaseModel:
         allowed = cls._columns(db)
         data = {k: v for k, v in data.items() if k in allowed}
         if not data:
+            db.close()
             return {"error": "no valid fields provided"}
         cols = ", ".join(data.keys())
         placeholders = ", ".join("?" for _ in data)
         db.execute(f"INSERT INTO {cls.table} ({cols}) VALUES ({placeholders})", list(data.values()))
         db.commit()
-        return cls.find(db.execute("SELECT last_insert_rowid()").fetchone()[0])
+        new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # Release the write lock before returning: leaving it open blocked
+        # every other module that writes on its own connection.
+        db.close()
+        return cls.find(new_id)
     
     @classmethod
     def update(cls, id, **data):
@@ -190,11 +253,13 @@ class BaseModel:
         allowed = cls._columns(db)
         data = {k: v for k, v in data.items() if k in allowed}
         if not data:
+            db.close()
             return {"error": "no valid fields provided"}
         sets = ", ".join(f"{k} = ?" for k in data)
         vals = list(data.values()) + [id]
         db.execute(f"UPDATE {cls.table} SET {sets} WHERE id = ?", vals)
         db.commit()
+        db.close()
         return cls.find(id)
     
     @classmethod
@@ -202,6 +267,7 @@ class BaseModel:
         db = get_db()
         db.execute(f"DELETE FROM {cls.table} WHERE id = ?", (id,))
         db.commit()
+        db.close()
         return True
 
 class Producto(BaseModel):
@@ -395,9 +461,18 @@ def handle_request(payload: bytes) -> bytes:
                 accepts_token = True
             if not accepts_token:
                 filtered_args.pop("token")
-        result = fn(**filtered_args)
+        # One connection for the whole request, closed in the finally below.
+        _open_request_conn()
+        try:
+            result = fn(**filtered_args)
+        finally:
+            _close_request_conn()
         return msgpack.packb({"result": result, "error": None}, use_bin_type=True)
     except Exception as e:
+        try:
+            _close_request_conn()
+        except Exception:
+            pass
         trace = traceback.format_exc()
         return msgpack.packb({"result": None, "error": f"{e}\n{trace}"}, use_bin_type=True)
 

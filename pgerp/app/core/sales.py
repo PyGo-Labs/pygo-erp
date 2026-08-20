@@ -20,10 +20,17 @@ from core.registry import register
 
 
 def get_db():
+    """Use the request-scoped connection owned by core.main when available."""
+    try:
+        from core.main import get_db as _shared
+        return _shared()
+    except Exception:
+        pass
     import sqlite3
-    db_path = os.environ.get("PYGO_DB", "/tmp/pgerp.db")
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(os.environ.get("PYGO_DB", "/tmp/pgerp.db"), timeout=15.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
 
@@ -136,7 +143,60 @@ def sales_orders_confirm(order_id=None, token=None, **kwargs):
     
     db.execute("UPDATE sales_orders SET status = 'confirmed' WHERE id = ?", (order_id,))
     db.commit()
-    return {"confirmed": True, "order_id": order_id}
+
+    # Confirming promises the goods, so reserve them. What cannot be reserved
+    # becomes a backorder instead of an over-promise nobody notices.
+    #
+    # The reservation helpers open their own connection, so this one must be
+    # closed first or SQLite raises "database is locked".
+    items = db.execute("SELECT * FROM sales_order_items WHERE order_id = ?",
+                       (order_id,)).fetchall()
+    plan = []
+    for item in items:
+        wh = db.execute(
+            "SELECT warehouse_id FROM stock WHERE producto_id = ? "
+            "ORDER BY quantity DESC LIMIT 1", (item["producto_id"],)).fetchone()
+        plan.append((item["producto_id"], float(item["quantity"]),
+                     wh["warehouse_id"] if wh else None))
+    db.close()
+
+    reserved, backordered = [], []
+    try:
+        from core.reservations import (get_db as res_db, available_quantity,
+                                       reservations_reserve, backorders_create)
+        for pid, want, wid in plan:
+            if wid is None:
+                backorders_create(document_type="sales_order", document_id=order_id,
+                                  producto_id=pid, quantity_ordered=want,
+                                  quantity_pending=want)
+                backordered.append({"producto_id": pid, "quantity": want})
+                continue
+
+            probe = res_db()
+            can = min(want, max(available_quantity(probe, pid, wid), 0))
+            probe.close()
+
+            if can > 0:
+                r = reservations_reserve(producto_id=pid, warehouse_id=wid,
+                                         quantity=can, document_type="sales_order",
+                                         document_id=order_id)
+                if "error" not in r:
+                    reserved.append({"producto_id": pid, "quantity": can})
+            missing = round(want - can, 6)
+            if missing > 0:
+                backorders_create(document_type="sales_order", document_id=order_id,
+                                  producto_id=pid, warehouse_id=wid,
+                                  quantity_ordered=want, quantity_pending=missing)
+                backordered.append({"producto_id": pid, "quantity": missing})
+    except Exception:
+        pass  # reservations must never block a confirmation
+
+    result = {"confirmed": True, "order_id": order_id}
+    if reserved:
+        result["reserved"] = reserved
+    if backordered:
+        result["backordered"] = backordered
+    return result
 
 
 @register("core.sales.orders.deliver")
@@ -163,6 +223,7 @@ def sales_orders_deliver(order_id=None, token=None, **kwargs):
     items = db.execute("SELECT * FROM sales_order_items WHERE order_id = ?", (order_id,)).fetchall()
     total_cogs = 0.0
     uncosted = 0.0
+    lots_issued = []
     for item in items:
         # Find stock for this product (any warehouse)
         stock = db.execute(
@@ -195,11 +256,32 @@ def sales_orders_deliver(order_id=None, token=None, **kwargs):
             uncosted += float(costing.get("uncosted_quantity") or 0)
         except Exception:
             pass  # valuation must never block a delivery
+
+        # Issue the actual lots (FEFO) for tracked products
+        try:
+            from core.lots import consume_from_lots
+            lot_result = consume_from_lots(
+                db, item["producto_id"], stock["warehouse_id"], item["quantity"],
+                source_type="sales_order", source_id=order_id)
+            if lot_result["consumed"]:
+                lots_issued.extend(lot_result["consumed"])
+        except Exception:
+            pass
     
     db.execute("UPDATE sales_orders SET status = 'delivered' WHERE id = ?", (order_id,))
     db.commit()
-    
+    db.close()  # release the write lock before the reservation helper opens its own
+
+    # The goods physically left, so the reservation is consumed, not pending
+    try:
+        from core.reservations import reservations_fulfill
+        reservations_fulfill(document_type="sales_order", document_id=order_id)
+    except Exception:
+        pass
+
     result = {"delivered": True, "order_id": order_id, "cogs": round(total_cogs, 2)}
+    if lots_issued:
+        result["lots_issued"] = lots_issued
     if uncosted:
         result["uncosted_quantity"] = round(uncosted, 6)
         result["note"] = "some quantity had no cost layer and used productos.cost"

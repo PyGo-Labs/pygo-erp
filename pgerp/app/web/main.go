@@ -1223,6 +1223,86 @@ func registerRoutes(app *web.App) {
 	r.Handle("GET", "/api/fx/exposure", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.fx.exposure", ctx)
 	}, false)
+
+	// --- D2: Lots and serials ---
+	r.Handle("GET", "/api/lots", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.lots.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/lots/tracking", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.lots.set_tracking", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/lots/receive", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.lots.receive", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/lots/consume", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.lots.consume", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/lots/trace", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.lots.trace", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/lots/expiring", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.lots.expiring", ctx)
+	}, false)
+
+	// --- D2: Reservations ---
+	r.Handle("GET", "/api/stock/availability", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.stock.availability", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/reservations", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reservations.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/reservations", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reservations.reserve", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/reservations/release", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reservations.release", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/reservations/fulfill", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reservations.fulfill", ctx)
+	}, false)
+
+	// --- D2: Backorders ---
+	r.Handle("GET", "/api/backorders", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.backorders.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/backorders", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.backorders.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/backorders/fulfill", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.backorders.fulfill", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/backorders/cancel", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.backorders.cancel", ctx)
+	}, false)
+
+	// --- D2: Reorder rules ---
+	r.Handle("GET", "/api/reorder/rules", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reorder.rules", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/reorder/rules", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reorder.rules.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/reorder/suggestions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reorder.suggestions", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/reorder/create-rfq", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.reorder.create_rfq", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {

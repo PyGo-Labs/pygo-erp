@@ -73,6 +73,19 @@ cp /tmp/acc.bak app/core/accounting.py
 
 ## Pitfalls learned the hard way
 
+- **One connection per request.** `core.main.get_db()` returns a shared,
+  request-scoped connection that the dispatcher closes in a `finally`. Handlers
+  historically opened their own and returned without closing it, holding the
+  SQLite write lock so any *other* module failed with `database is locked`.
+  New modules must call `get_db()` from their own module (which delegates to
+  `core.main`) — never `sqlite3.connect` directly.
+- **`db.close()` inside a handler is a no-op** (a proxy swallows it). Only the
+  dispatcher closes the real connection.
+- **E2E scripts that assert on specific record ids need a fresh DB.**
+  `verify_all.sh` runs those (`test_d2`, `test_d2_integration`) in their own
+  restarted server at the end; the rest run in sequence. Chaining them without
+  a restart makes `producto_id=1` point at someone else's product and produces
+  confusing failures that look like locks.
 - **`HANDLERS` is process-global.** Module install/uninstall leaks across tests
   in the same run. Assert on module *state*, not on registry size.
 - **Handler names are plural in some modules**: `boms_create`, `boms_explode`,
