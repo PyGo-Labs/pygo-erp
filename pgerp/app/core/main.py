@@ -121,6 +121,11 @@ from core import hr_core
 from core import hr_leave_expenses
 from core.migrations import hr  # noqa: F401
 
+# --- MRP (B5) ---
+from core import mrp_bom
+from core import mrp_production
+from core.migrations import mrp  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:

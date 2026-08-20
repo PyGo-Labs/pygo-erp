@@ -878,6 +878,69 @@ func registerRoutes(app *web.App) {
 	r.Handle("POST", "/api/hr/expenses/reimburse", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.hr.expenses.reimburse", ctx)
 	}, false)
+
+	// --- B5: BOM ---
+	r.Handle("GET", "/api/mrp/boms", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.boms.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/mrp/boms", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.boms.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/mrp/boms/explode", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.boms.explode", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/mrp/boms/cost", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.boms.cost", ctx)
+	}, false)
+
+	// --- B5: Work centers & routings ---
+	r.Handle("GET", "/api/mrp/work-centers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.work_centers.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/mrp/work-centers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.work_centers.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/mrp/routings", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.routings.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/mrp/routings", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.routings.create", ctx)
+	}, false)
+
+	// --- B5: Production orders ---
+	r.Handle("GET", "/api/mrp/production", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.production.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/mrp/production", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.production.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/mrp/production/availability", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.production.check_availability", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/mrp/production/start", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.production.start", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/mrp/production/complete", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.production.complete", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/mrp/production/cancel", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.production.cancel", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/mrp/dashboard", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.mrp.dashboard", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {
