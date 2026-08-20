@@ -89,6 +89,12 @@ from core import notifications
 # --- Cache ---
 from core import cache
 
+# --- Commercial base (B1) ---
+from core import commercial_uom
+from core import commercial_pricing
+from core import commercial_terms
+from core.migrations import commercial  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:
@@ -363,6 +369,26 @@ def init_db():
                    ('admin@demo.com', pw_hash, salt, 'Admin', 'admin', 1))
         db.commit()
         print('Default admin: admin@demo.com / admin123', flush=True)
+
+    # Seed universal core data (idempotent)
+    try:
+        from core.accounting import accounts_seed
+        accounts_seed()
+    except Exception as e:
+        print(f'accounts_seed skipped: {e}', flush=True)
+
+    for seed_fn, label in [
+        ('core.commercial_uom:uom_seed', 'uom'),
+        ('core.commercial_pricing:pricelists_seed', 'pricelists'),
+        ('core.commercial_terms:payment_terms_seed', 'payment_terms'),
+        ('core.commercial_terms:sequences_seed', 'sequences'),
+    ]:
+        mod_name, fn_name = seed_fn.split(':')
+        try:
+            mod = __import__(mod_name, fromlist=[fn_name])
+            getattr(mod, fn_name)()
+        except Exception as e:
+            print(f'{label} seed skipped: {e}', flush=True)
 
 def main():
     import argparse

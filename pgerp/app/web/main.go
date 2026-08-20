@@ -543,6 +543,78 @@ func registerRoutes(app *web.App) {
 	r.Handle("DELETE", "/api/cache/clear", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.cache.clear", ctx)
 	}, false)
+
+	// --- B1: UoM ---
+	r.Handle("GET", "/api/uom/categories", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.uom.categories.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/uom/categories", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.uom.categories.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/uom", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.uom.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/uom", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.uom.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/uom/convert", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.uom.convert", ctx)
+	}, false)
+
+	// --- B1: Pricelists ---
+	r.Handle("GET", "/api/pricelists", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.pricelists.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/pricelists", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.pricelists.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/pricelists/items", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.pricelists.items.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/pricelists/items", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.pricelists.items.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/pricelists/resolve", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.pricelists.resolve", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/pricelists/assign-customer", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.pricelists.assign_customer", ctx)
+	}, false)
+
+	// --- B1: Payment terms ---
+	r.Handle("GET", "/api/payment-terms", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.payment_terms.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/payment-terms", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.payment_terms.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/payment-terms/schedule", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.payment_terms.schedule", ctx)
+	}, false)
+
+	// --- B1: Sequences ---
+	r.Handle("GET", "/api/sequences", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sequences.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/sequences", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sequences.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/sequences/next", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sequences.next", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {
