@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administración — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4 flex-wrap">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/contabilidad" class="hover:text-warn">Contabilidad</a>
+    <a href="/tesoreria" class="hover:text-warn">Tesorería</a>
+    <a href="/rrhh" class="hover:text-warn">RRHH</a>
+    <a href="/produccion" class="hover:text-warn">Producción</a>
+    <a href="/admin" class="text-warn font-medium">Administración</a>
+  </div>
+</nav>
+
+<div x-data="admin()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+  <h1 class="text-2xl font-bold mb-6">Administración</h1>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <div class="flex gap-1 mb-6 border-b border-gray-200 flex-wrap">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+              class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+              :class="tab === t.id ? 'border-brand text-brand'
+                                   : 'border-transparent text-gray-500 hover:text-gray-800'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <!-- ===== MODULES ===== -->
+  <template x-if="tab === 'modules'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
+        <div class="flex justify-between items-center">
+          <div>
+            <h2 class="font-semibold">Módulos instalables</h2>
+            <p class="text-sm text-gray-500">
+              Las localizaciones y extensiones se activan sin tocar el núcleo.
+            </p>
+          </div>
+          <button @click="scanModules()" :disabled="busy"
+                  class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+            <span x-text="busy ? 'Buscando…' : 'Buscar módulos en disco'"></span>
+          </button>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <template x-for="m in modules" :key="m.name">
+          <div class="bg-white rounded-lg border p-5"
+               :class="m.state === 'installed' ? 'border-green-300' : 'border-gray-200'">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <h3 class="font-semibold" x-text="m.display_name || m.name"></h3>
+                <p class="text-xs text-gray-400 font-mono" x-text="m.name + ' v' + m.version"></p>
+              </div>
+              <span class="text-xs px-2 py-0.5 rounded font-medium"
+                    :class="stateBadge(m.state)" x-text="stateLabel(m.state)"></span>
+            </div>
+
+            <p class="text-sm text-gray-600 mb-3" x-text="m.summary || 'Sin descripción'"></p>
+
+            <div class="flex gap-3 text-xs text-gray-500 mb-3">
+              <span x-show="m.category" x-text="'📂 ' + m.category"></span>
+              <span x-show="(m.depends || []).length"
+                    x-text="'🔗 depende de ' + (m.depends || []).join(', ')"></span>
+              <span x-show="m.hooks" x-text="'🪝 ' + m.hooks + ' hooks'"></span>
+              <span x-show="m.migrations_applied"
+                    x-text="'🗄 ' + m.migrations_applied + ' migraciones'"></span>
+            </div>
+
+            <div class="flex gap-2">
+              <button x-show="m.state === 'uninstalled'" @click="moduleAction(m.name, 'install')"
+                      :disabled="busy"
+                      class="text-xs px-3 py-1.5 rounded bg-brand text-white disabled:opacity-40">
+                Instalar
+              </button>
+              <button x-show="m.state === 'installed'" @click="moduleAction(m.name, 'disable')"
+                      :disabled="busy"
+                      class="text-xs px-3 py-1.5 rounded border border-amber-300 text-warn hover:bg-amber-50">
+                Desactivar
+              </button>
+              <button x-show="m.state === 'disabled'" @click="moduleAction(m.name, 'enable')"
+                      :disabled="busy"
+                      class="text-xs px-3 py-1.5 rounded bg-ok text-white disabled:opacity-40">
+                Reactivar
+              </button>
+              <button x-show="m.state !== 'uninstalled'" @click="moduleAction(m.name, 'uninstall')"
+                      :disabled="busy"
+                      class="text-xs px-3 py-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                Desinstalar
+              </button>
+              <button @click="moduleInfo(m.name)"
+                      class="text-xs px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-100">
+                Detalle
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="!modules.length">
+          <div class="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 md:col-span-2">
+            No hay módulos registrados. Usa «Buscar módulos en disco».
+          </div>
+        </template>
+      </div>
+
+      <!-- Module detail -->
+      <template x-if="modDetail.name">
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <div class="flex justify-between items-start mb-4">
+            <h2 class="font-semibold" x-text="'Detalle · ' + (modDetail.display_name || modDetail.name)"></h2>
+            <button @click="modDetail = {}" class="text-gray-400 hover:text-gray-700">×</button>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-4">
+            <div><span class="block text-xs text-gray-500">Estado</span>
+                 <span x-text="stateLabel(modDetail.state)"></span></div>
+            <div><span class="block text-xs text-gray-500">Versión</span>
+                 <span x-text="modDetail.version"></span></div>
+            <div><span class="block text-xs text-gray-500">Autor</span>
+                 <span x-text="modDetail.author || '—'"></span></div>
+            <div><span class="block text-xs text-gray-500">Instalado</span>
+                 <span x-text="(modDetail.installed_at || '').slice(0,10) || '—'"></span></div>
+          </div>
+
+          <template x-if="(modDetail.hooks || []).length">
+            <div class="mb-4">
+              <h3 class="text-sm font-semibold mb-2">Puntos de extensión registrados</h3>
+              <table class="w-full text-sm border border-gray-200 rounded">
+                <thead class="bg-gray-50 text-left text-gray-600">
+                  <tr>
+                    <th class="px-3 py-2">Punto</th>
+                    <th class="px-3 py-2">Handler</th>
+                    <th class="px-3 py-2 text-right">Prioridad</th>
+                    <th class="px-3 py-2">Activo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="h in modDetail.hooks" :key="h.id">
+                    <tr class="border-t border-gray-100">
+                      <td class="px-3 py-2 font-mono text-xs" x-text="h.hook_point"></td>
+                      <td class="px-3 py-2 font-mono text-xs" x-text="h.handler"></td>
+                      <td class="px-3 py-2 text-right" x-text="h.priority"></td>
+                      <td class="px-3 py-2">
+                        <span class="text-xs" :class="h.is_active ? 'text-ok' : 'text-gray-400'"
+                              x-text="h.is_active ? '✓ sí' : 'no'"></span>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <template x-if="(modDetail.migrations || []).length">
+            <div>
+              <h3 class="text-sm font-semibold mb-2">Migraciones aplicadas</h3>
+              <div class="text-sm space-y-1">
+                <template x-for="mg in modDetail.migrations" :key="mg.id">
+                  <div class="flex justify-between text-gray-600">
+                    <span class="font-mono text-xs" x-text="mg.migration_name"></span>
+                    <span class="text-xs" x-text="(mg.applied_at || '').slice(0,16)"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </section>
+      </template>
+
+      <!-- Hooks -->
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="font-semibold">Puntos de extensión activos</h2>
+          <div class="flex gap-2">
+            <input x-model="hookPoint" placeholder="punto.a.probar"
+                   class="text-sm border border-gray-300 rounded px-2 py-1 font-mono w-56">
+            <button @click="runHook()" :disabled="busy || !hookPoint"
+                    class="text-xs px-3 py-1.5 rounded bg-brand text-white disabled:opacity-40">
+              Disparar
+            </button>
+          </div>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Módulo</th>
+              <th class="px-4 py-2">Punto</th>
+              <th class="px-4 py-2">Handler</th>
+              <th class="px-4 py-2 text-right">Prioridad</th>
+              <th class="px-4 py-2">Activo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="h in hooks" :key="h.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2" x-text="h.module_name"></td>
+                <td class="px-4 py-2 font-mono text-xs" x-text="h.hook_point"></td>
+                <td class="px-4 py-2 font-mono text-xs text-gray-600" x-text="h.handler"></td>
+                <td class="px-4 py-2 text-right" x-text="h.priority"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs" :class="h.is_active ? 'text-ok' : 'text-gray-400'"
+                        x-text="h.is_active ? '✓' : '—'"></span>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!hooks.length">
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">
+                Sin hooks registrados
+              </td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <template x-if="hookResult.hook_point">
+        <section class="bg-white rounded-lg border border-gray-200 p-5 mt-4">
+          <h3 class="font-semibold text-sm mb-2">
+            Resultado de <span class="font-mono" x-text="hookResult.hook_point"></span>
+          </h3>
+          <p class="text-sm mb-2">
+            Handlers ejecutados: <span class="font-medium" x-text="hookResult.executed"></span>
+          </p>
+          <pre class="bg-gray-50 border border-gray-200 rounded p-3 text-xs overflow-x-auto"
+               x-text="JSON.stringify(hookResult.payload, null, 2)"></pre>
+        </section>
+      </template>
+    </div>
+  </template>
+  <!-- ===== TAXES ===== -->
+  <template x-if="tab === 'taxes'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-1">Nuevo impuesto</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          Motor genérico: porcentaje, monto fijo o porcentaje sobre otro impuesto.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+          <input x-model="txForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2 md:col-span-2">
+          <input x-model="txForm.code" placeholder="Código"
+                 class="border border-gray-300 rounded px-3 py-2 uppercase">
+          <input x-model="txForm.country" placeholder="País (MX)" maxlength="2"
+                 class="border border-gray-300 rounded px-3 py-2 uppercase">
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Cálculo</label>
+            <select x-model="txForm.computation" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="percent">Porcentaje</option>
+              <option value="fixed">Monto fijo</option>
+              <option value="percent_of_tax">% sobre impuestos</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Valor *</label>
+            <input x-model.number="txForm.amount" type="number" step="0.0001"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Ámbito</label>
+            <select x-model="txForm.scope" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="both">Venta y compra</option>
+              <option value="sale">Solo venta</option>
+              <option value="purchase">Solo compra</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Orden</label>
+            <input x-model.number="txForm.sequence" type="number"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+        </div>
+        <div class="flex gap-6 text-sm mb-4">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="txForm.price_include" class="rounded border-gray-300">
+            Incluido en el precio
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="txForm.is_withholding" class="rounded border-gray-300">
+            Es retención (se resta)
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="txForm.include_base_amount" class="rounded border-gray-300">
+            Aumenta la base de los siguientes
+          </label>
+        </div>
+        <button @click="createTax()" :disabled="busy || !txForm.name || txForm.amount === null"
+                class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Crear impuesto
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Impuestos configurados (<span x-text="taxes.length"></span>)
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Nombre</th>
+              <th class="px-4 py-2">Código</th>
+              <th class="px-4 py-2">País</th>
+              <th class="px-4 py-2 text-right">Valor</th>
+              <th class="px-4 py-2">Tipo</th>
+              <th class="px-4 py-2">Marcas</th>
+              <th class="px-4 py-2">Origen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="t in taxes" :key="t.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2" x-text="t.name"></td>
+                <td class="px-4 py-2 font-mono text-xs" x-text="t.code || '—'"></td>
+                <td class="px-4 py-2" x-text="t.country || 'universal'"></td>
+                <td class="px-4 py-2 text-right font-medium"
+                    x-text="t.computation === 'fixed' ? money(t.amount) : t.amount + '%'"></td>
+                <td class="px-4 py-2 text-xs" x-text="compLabel(t.computation)"></td>
+                <td class="px-4 py-2">
+                  <span x-show="t.price_include"
+                        class="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-brand mr-1">incluido</span>
+                  <span x-show="t.is_withholding"
+                        class="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-700 mr-1">retención</span>
+                  <span x-show="t.include_base_amount"
+                        class="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-warn">cascada</span>
+                </td>
+                <td class="px-4 py-2 text-xs text-gray-400"
+                    x-text="t.module_name || 'núcleo'"></td>
+              </tr>
+            </template>
+            <template x-if="!taxes.length">
+              <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Sin impuestos</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Tax simulator -->
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-1">Simulador</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          Selecciona impuestos y verifica el cálculo antes de usarlos en documentos.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Importe base</label>
+            <input x-model.number="simAmount" type="number" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">Grupo de impuestos</label>
+            <select x-model="simGroupId" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Selección manual</option>
+              <template x-for="g in taxGroups" :key="g.id">
+                <option :value="g.id"
+                        x-text="g.name + ' (' + (g.taxes || []).length + ' impuestos)'"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 mb-4" x-show="!simGroupId">
+          <template x-for="t in taxes" :key="t.id">
+            <button @click="toggleSimTax(t.id)"
+                    class="text-xs px-2.5 py-1 rounded border"
+                    :class="simTaxIds.includes(t.id)
+                      ? 'bg-brand text-white border-brand'
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
+                    x-text="t.code || t.name"></button>
+          </template>
+        </div>
+
+        <button @click="simulate()" :disabled="busy || !simAmount"
+                class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Calcular
+        </button>
+
+        <template x-if="simResult.total !== undefined">
+          <div class="mt-4">
+            <table class="w-full text-sm border border-gray-200 rounded mb-3">
+              <thead class="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th class="px-3 py-2">Impuesto</th>
+                  <th class="px-3 py-2 text-right">Tasa</th>
+                  <th class="px-3 py-2 text-right">Base</th>
+                  <th class="px-3 py-2 text-right">Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="t in (simResult.taxes || [])" :key="t.tax_id">
+                  <tr class="border-t border-gray-100"
+                      :class="t.is_withholding ? 'bg-red-50' : ''">
+                    <td class="px-3 py-2">
+                      <span x-text="t.name"></span>
+                      <span x-show="t.is_withholding" class="text-xs text-red-600"> (retención)</span>
+                    </td>
+                    <td class="px-3 py-2 text-right" x-text="t.rate"></td>
+                    <td class="px-3 py-2 text-right text-gray-500" x-text="money(t.base)"></td>
+                    <td class="px-3 py-2 text-right font-medium" x-text="money(t.amount)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div class="text-sm space-y-1 max-w-xs ml-auto">
+              <div class="flex justify-between">
+                <span class="text-gray-500">Base sin impuestos</span>
+                <span class="font-medium" x-text="money(simResult.untaxed_amount)"></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Impuestos</span>
+                <span class="font-medium text-ok" x-text="money(simResult.total_taxes)"></span>
+              </div>
+              <div class="flex justify-between" x-show="simResult.total_withheld">
+                <span class="text-gray-500">Retenciones</span>
+                <span class="font-medium text-red-600"
+                      x-text="'-' + money(simResult.total_withheld)"></span>
+              </div>
+              <div class="flex justify-between text-base border-t pt-1">
+                <span class="font-semibold">Total</span>
+                <span class="font-bold" x-text="money(simResult.total)"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+    </div>
+  </template>
+  <!-- ===== AUDIT ===== -->
+  <template x-if="tab === 'audit'">
+    <div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+          <div class="text-xs uppercase text-gray-500">Registros</div>
+          <div class="text-2xl font-bold" x-text="auditSummary.total_entries ?? 0"></div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 p-4 md:col-span-3">
+          <div class="text-xs uppercase text-gray-500 mb-1">Por acción</div>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="(count, action) in (auditSummary.by_action || {})" :key="action">
+              <span class="text-xs px-2 py-1 rounded bg-gray-100">
+                <span x-text="actionLabel(action)"></span>
+                <span class="font-bold" x-text="' ' + count"></span>
+              </span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <section class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
+        <h2 class="font-semibold mb-3">Consultar historial</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input x-model="audQuery.entity_type" placeholder="Entidad (producto, factura…)"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model.number="audQuery.entity_id" type="number" placeholder="ID (opcional)"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model.number="audQuery.user_id" type="number" placeholder="Usuario (opcional)"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <button @click="loadAuditHistory()" :disabled="busy || !audQuery.entity_type"
+                  class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+            Buscar
+          </button>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Historial de cambios
+          <span class="text-sm font-normal text-gray-500" x-show="audit.count"
+                x-text="'· ' + audit.count + ' registros'"></span>
+        </div>
+        <div class="divide-y divide-gray-100">
+          <template x-for="e in (audit.entries || [])" :key="e.id">
+            <div class="px-5 py-3">
+              <div class="flex justify-between items-start mb-1">
+                <div class="text-sm">
+                  <span class="text-xs px-2 py-0.5 rounded font-medium mr-2"
+                        :class="actionBadge(e.action)" x-text="actionLabel(e.action)"></span>
+                  <span class="font-mono text-xs text-gray-500"
+                        x-text="e.entity_type + (e.entity_id ? ' #' + e.entity_id : '')"></span>
+                  <span class="text-gray-600" x-text="' por ' + (e.user_email || 'sistema')"></span>
+                </div>
+                <span class="text-xs text-gray-400" x-text="(e.created_at || '').slice(0,16)"></span>
+              </div>
+              <template x-if="diffOf(e).length">
+                <div class="mt-1 text-xs space-y-0.5">
+                  <template x-for="d in diffOf(e)" :key="d.field">
+                    <div class="flex gap-2">
+                      <span class="font-medium text-gray-700" x-text="d.field + ':'"></span>
+                      <span class="text-red-600 line-through" x-text="d.from"></span>
+                      <span class="text-gray-400">→</span>
+                      <span class="text-ok font-medium" x-text="d.to"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="!(audit.entries || []).length">
+            <div class="px-5 py-8 text-center text-gray-400">
+              Sin registros. Busca por entidad para ver su historial.
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 p-5 mt-6">
+        <h2 class="font-semibold mb-3">Actividad por entidad</h2>
+        <div class="space-y-2">
+          <template x-for="(count, entity) in (auditSummary.by_entity || {})" :key="entity">
+            <div>
+              <div class="flex justify-between text-sm mb-1">
+                <span x-text="entity"></span>
+                <span class="font-medium" x-text="count"></span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2">
+                <div class="h-2 rounded-full bg-brand"
+                     :style="`width: ${maxEntityCount ? (count / maxEntityCount * 100) : 0}%`"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== PERMISSIONS ===== -->
+  <template x-if="tab === 'permissions'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-1">Otorgar permiso</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          Control granular por módulo y acción; opcionalmente a nivel de campo.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <select x-model="permForm.user_id" class="border border-gray-300 rounded px-3 py-2">
+            <option value="">Usuario *</option>
+            <template x-for="u in users" :key="u.id">
+              <option :value="u.id" x-text="u.email || u.name"></option>
+            </template>
+          </select>
+          <input x-model="permForm.module" placeholder="Módulo (sales)"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <select x-model="permForm.action" class="border border-gray-300 rounded px-3 py-2">
+            <option value="read">Leer</option>
+            <option value="create">Crear</option>
+            <option value="update">Modificar</option>
+            <option value="delete">Eliminar</option>
+            <option value="approve">Aprobar</option>
+          </select>
+          <input x-model="permForm.field" placeholder="Campo (opcional)"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <button @click="grantPermission()"
+                  :disabled="busy || !permForm.user_id || !permForm.module"
+                  class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+            Otorgar
+          </button>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-3">Verificar permiso</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <select x-model="checkForm.user_id" class="border border-gray-300 rounded px-3 py-2">
+            <option value="">Usuario</option>
+            <template x-for="u in users" :key="u.id">
+              <option :value="u.id" x-text="u.email || u.name"></option>
+            </template>
+          </select>
+          <input x-model="checkForm.module" placeholder="Módulo"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="checkForm.action" placeholder="Acción"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <button @click="checkPermission()" :disabled="busy"
+                  class="border border-gray-300 px-4 py-2 rounded font-medium hover:bg-gray-50">
+            Verificar
+          </button>
+        </div>
+        <template x-if="checkResult.allowed !== undefined">
+          <p class="mt-3 text-sm font-medium"
+             :class="checkResult.allowed ? 'text-ok' : 'text-red-600'"
+             x-text="checkResult.allowed ? '✓ Permitido' : '✗ Denegado'"></p>
+        </template>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Permisos configurados (<span x-text="permissions.length"></span>)
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Rol</th>
+              <th class="px-4 py-2">Módulo</th>
+              <th class="px-4 py-2">Acción</th>
+              <th class="px-4 py-2">Campo</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="p in permissions" :key="p.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2" x-text="p.role_name || p.role_id"></td>
+                <td class="px-4 py-2 font-mono text-xs" x-text="p.module"></td>
+                <td class="px-4 py-2" x-text="p.action"></td>
+                <td class="px-4 py-2 text-gray-500" x-text="p.field || 'todos'"></td>
+                <td class="px-4 py-2">
+                  <button @click="revokePermission(p)"
+                          class="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                    Revocar
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!permissions.length">
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">
+                Sin permisos configurados
+              </td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== SYSTEM ===== -->
+  <template x-if="tab === 'system'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h2 class="font-semibold">Estado del sistema</h2>
+            <p class="text-sm" :class="readiness.operational ? 'text-ok' : 'text-warn'"
+               x-text="readiness.operational
+                 ? '✓ Todas las áreas operativas'
+                 : '⚠ Áreas pendientes: ' + (readiness.blocking_areas || []).join(', ')"></p>
+          </div>
+          <button @click="loadReadiness()" :disabled="busy"
+                  class="border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50">
+            Revisar
+          </button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <template x-for="(data, area) in (readiness.areas || {})" :key="area">
+            <div class="border rounded p-3"
+                 :class="data.ready ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'">
+              <div class="text-xs uppercase text-gray-600 font-semibold" x-text="areaLabel(area)"></div>
+              <div class="text-lg font-bold" :class="data.ready ? 'text-ok' : 'text-warn'"
+                   x-text="data.ready ? 'OK' : 'Falta'"></div>
+              <div class="text-[11px] text-gray-500 mt-1 leading-tight">
+                <template x-for="(v, k) in data" :key="k">
+                  <div x-show="k !== 'ready'" x-text="k + ': ' + v"></div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-3">Adjuntos del sistema</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          <div class="border border-gray-200 rounded p-3">
+            <div class="text-xs uppercase text-gray-500">Total adjuntos</div>
+            <div class="text-xl font-bold" x-text="attachSummary.total_attachments ?? 0"></div>
+          </div>
+          <div class="border border-gray-200 rounded p-3">
+            <div class="text-xs uppercase text-gray-500">Espacio usado</div>
+            <div class="text-xl font-bold"
+                 x-text="(attachSummary.total_size_kb ?? 0) + ' KB'"></div>
+          </div>
+        </div>
+        <table class="w-full text-sm border border-gray-200 rounded">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-3 py-2">Entidad</th>
+              <th class="px-3 py-2 text-right">Archivos</th>
+              <th class="px-3 py-2 text-right">Tamaño</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="a in (attachSummary.by_entity || [])" :key="a.entity_type">
+              <tr class="border-t border-gray-100">
+                <td class="px-3 py-2 font-mono text-xs" x-text="a.entity_type"></td>
+                <td class="px-3 py-2 text-right" x-text="a.count"></td>
+                <td class="px-3 py-2 text-right" x-text="a.size_kb + ' KB'"></td>
+              </tr>
+            </template>
+            <template x-if="!(attachSummary.by_entity || []).length">
+              <tr><td colspan="3" class="px-3 py-6 text-center text-gray-400">Sin adjuntos</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+</div>
+<script>
+function admin() {
+  return {
+    tab: 'modules',
+    tabs: [
+      { id: 'modules', label: 'Módulos' },
+      { id: 'taxes', label: 'Impuestos' },
+      { id: 'audit', label: 'Auditoría' },
+      { id: 'permissions', label: 'Permisos' },
+      { id: 'system', label: 'Sistema' },
+    ],
+    modules: [], hooks: [], taxes: [], taxGroups: [], permissions: [],
+    modDetail: {}, hookResult: {}, audit: {}, auditSummary: {},
+    readiness: {}, attachSummary: {}, checkResult: {}, simResult: {},
+    hookPoint: 'invoice.before_create',
+    txForm: { name: '', code: '', country: '', computation: 'percent',
+              amount: null, scope: 'both', sequence: 10,
+              price_include: false, is_withholding: false, include_base_amount: false },
+    simAmount: 1000, simGroupId: '', simTaxIds: [],
+    audQuery: { entity_type: 'producto', entity_id: null, user_id: null },
+    permForm: { user_id: '', module: '', action: 'read', field: '' },
+    checkForm: { user_id: '', module: '', action: 'read' },
+    users: [],
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    stateLabels: {
+      installed: 'Instalado', uninstalled: 'No instalado', disabled: 'Desactivado',
+    },
+    stateLabel(s) { return this.stateLabels[s] || s || '—' },
+    stateBadge(s) {
+      return {
+        installed: 'bg-green-50 text-ok',
+        disabled: 'bg-amber-50 text-warn',
+        uninstalled: 'bg-gray-100 text-gray-600',
+      }[s] || 'bg-gray-100 text-gray-600';
+    },
+
+    compLabels: {
+      percent: 'porcentaje', fixed: 'monto fijo', percent_of_tax: '% sobre impuesto',
+    },
+    compLabel(c) { return this.compLabels[c] || c },
+
+    actionLabels: {
+      create: 'creación', update: 'modificación', delete: 'eliminación',
+      view: 'consulta', approve: 'aprobación', reject: 'rechazo',
+      confirm: 'confirmación', cancel: 'cancelación',
+      login: 'acceso', logout: 'salida', export: 'exportación', import: 'importación',
+    },
+    actionLabel(a) { return this.actionLabels[a] || a },
+    actionBadge(a) {
+      return {
+        create: 'bg-green-50 text-ok',
+        update: 'bg-blue-50 text-brand',
+        delete: 'bg-red-50 text-red-700',
+        approve: 'bg-green-50 text-ok',
+        reject: 'bg-red-50 text-red-700',
+        import: 'bg-amber-50 text-warn',
+        export: 'bg-amber-50 text-warn',
+      }[a] || 'bg-gray-100 text-gray-600';
+    },
+
+    areaLabels: {
+      identity: 'Identidad', accounting: 'Contabilidad', commercial: 'Comercial',
+      inventory: 'Inventario', hr: 'RRHH', manufacturing: 'Producción',
+      extensibility: 'Módulos', governance: 'Gobernanza',
+    },
+    areaLabel(a) { return this.areaLabels[a] || a },
+
+    money(v) {
+      return Number(v || 0).toLocaleString('es-MX',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    get maxEntityCount() {
+      const vals = Object.values(this.auditSummary.by_entity || {});
+      return vals.length ? Math.max(...vals.map(Number)) : 0;
+    },
+
+    toggleSimTax(id) {
+      const i = this.simTaxIds.indexOf(id);
+      if (i >= 0) this.simTaxIds.splice(i, 1);
+      else this.simTaxIds.push(id);
+    },
+
+    // The API stores old_values/new_values; derive a field-level diff for display
+    diffOf(entry) {
+      const parse = v => {
+        if (!v) return {};
+        if (typeof v === 'object') return v;
+        try { return JSON.parse(v) } catch (e) { return {} }
+      };
+      if (entry.changes && Object.keys(entry.changes).length) {
+        return Object.entries(entry.changes).map(([field, c]) => ({
+          field,
+          from: c.from === null || c.from === undefined ? '(vacío)' : String(c.from),
+          to: c.to === null || c.to === undefined ? '(vacío)' : String(c.to),
+        }));
+      }
+      const oldV = parse(entry.old_values), newV = parse(entry.new_values);
+      const fields = new Set([...Object.keys(oldV), ...Object.keys(newV)]);
+      return [...fields]
+        .filter(f => String(oldV[f]) !== String(newV[f]))
+        .map(f => ({
+          field: f,
+          from: oldV[f] === undefined || oldV[f] === null ? '(vacío)' : String(oldV[f]),
+          to: newV[f] === undefined || newV[f] === null ? '(vacío)' : String(newV[f]),
+        }));
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 7000);
+    },
+    async init() {
+      await Promise.all([
+        this.loadModules(), this.loadHooks(), this.loadTaxes(),
+        this.loadAuditSummary(), this.loadPermissions(),
+        this.loadReadiness(), this.loadAttachments(), this.loadUsers(),
+      ]);
+    },
+
+    async loadUsers() {
+      try {
+        // The users endpoint lives under /api/auth/users
+        const u = await this.api('GET', '/api/auth/users');
+        this.users = Array.isArray(u) ? u : (u.users || []);
+      } catch (e) {}
+    },
+
+    async loadModules() {
+      try {
+        const m = await this.api('GET', '/api/modules');
+        this.modules = Array.isArray(m) ? m : (m.modules || []);
+      } catch (e) { this.notify('Error al cargar módulos: ' + e.message, 'error') }
+    },
+
+    async loadHooks() {
+      try {
+        const h = await this.api('GET', '/api/hooks');
+        this.hooks = Array.isArray(h) ? h : (h.hooks || []);
+      } catch (e) {}
+    },
+
+    async loadTaxes() {
+      try {
+        const t = await this.api('GET', '/api/tax');
+        this.taxes = Array.isArray(t) ? t : (t.taxes || []);
+      } catch (e) {}
+      try {
+        const g = await this.api('GET', '/api/tax/groups');
+        this.taxGroups = Array.isArray(g) ? g : (g.groups || []);
+      } catch (e) {}
+    },
+
+    async loadAuditSummary() {
+      try { this.auditSummary = await this.api('GET', '/api/audit/summary') || {} } catch (e) {}
+      try {
+        const a = await this.api('GET', '/api/audit');
+        this.audit = Array.isArray(a) ? { entries: a, count: a.length } : a;
+      } catch (e) {}
+    },
+
+    async loadPermissions() {
+      try {
+        const p = await this.api('GET', '/api/permissions');
+        this.permissions = Array.isArray(p) ? p : (p.permissions || []);
+      } catch (e) {}
+    },
+
+    async loadReadiness() {
+      try { this.readiness = await this.api('GET', '/api/system/readiness') || {} } catch (e) {}
+    },
+
+    async loadAttachments() {
+      try { this.attachSummary = await this.api('GET', '/api/attachments/summary') || {} } catch (e) {}
+    },
+
+    async scanModules() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/modules/scan');
+        this.notify(`Encontrados ${r.found ?? (r.modules || []).length} módulos en disco`);
+        await this.loadModules();
+      } catch (e) {
+        this.notify('Error al buscar módulos: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async moduleAction(name, action) {
+      const labels = { install: 'instalar', uninstall: 'desinstalar',
+                       enable: 'reactivar', disable: 'desactivar' };
+      if (action === 'uninstall' &&
+          !confirm(`¿Desinstalar ${name}? Sus hooks quedarán inactivos.`)) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', `/api/modules/${action}`, { name });
+        let detail = '';
+        if (r.migrations_applied) detail = ` · ${r.migrations_applied} migraciones aplicadas`;
+        if (r.handlers_after) detail += ` · ${r.handlers_after} handlers activos`;
+        if (r.hooks_disabled) detail = ` · ${r.hooks_disabled} hooks desactivados`;
+        this.notify(`Módulo ${name}: ${labels[action]} correctamente${detail}`);
+        await Promise.all([this.loadModules(), this.loadHooks(), this.loadTaxes()]);
+      } catch (e) {
+        this.notify(`No se pudo ${labels[action]} ${name}: ` + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async moduleInfo(name) {
+      this.busy = true;
+      try {
+        this.modDetail = await this.api('GET', `/api/modules/info?name=${encodeURIComponent(name)}`);
+      } catch (e) {
+        this.notify('Error al leer el detalle: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async runHook() {
+      this.busy = true;
+      try {
+        this.hookResult = await this.api('POST', '/api/hooks/run', {
+          hook_point: this.hookPoint,
+          payload: { source: 'admin_ui', probe: true },
+        });
+        this.notify(`Hook disparado · ${this.hookResult.executed} handlers ejecutados`);
+      } catch (e) {
+        this.notify('Error al disparar el hook: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createTax() {
+      this.busy = true;
+      try {
+        const body = {
+          name: this.txForm.name,
+          computation: this.txForm.computation,
+          amount: Number(this.txForm.amount),
+          scope: this.txForm.scope,
+          sequence: Number(this.txForm.sequence || 10),
+          price_include: this.txForm.price_include ? 1 : 0,
+          is_withholding: this.txForm.is_withholding ? 1 : 0,
+          include_base_amount: this.txForm.include_base_amount ? 1 : 0,
+        };
+        if (this.txForm.code) body.code = this.txForm.code.toUpperCase();
+        if (this.txForm.country) body.country = this.txForm.country.toUpperCase();
+        const r = await this.api('POST', '/api/tax', body);
+        this.notify(`Impuesto creado: ${r.name} (${r.code || 'sin código'})`);
+        this.txForm = { name: '', code: '', country: '', computation: 'percent',
+                        amount: null, scope: 'both', sequence: 10,
+                        price_include: false, is_withholding: false,
+                        include_base_amount: false };
+        await this.loadTaxes();
+      } catch (e) {
+        this.notify('Error al crear el impuesto: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async simulate() {
+      this.busy = true;
+      try {
+        // API contract: tax/compute is a GET endpoint
+        const q = new URLSearchParams({ amount: this.simAmount, quantity: 1 });
+        if (this.simGroupId) q.set('tax_group_id', this.simGroupId);
+        else if (this.simTaxIds.length) q.set('tax_ids', this.simTaxIds.join(','));
+        this.simResult = await this.api('GET', `/api/tax/compute?${q.toString()}`);
+      } catch (e) {
+        this.notify('Error al calcular: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async loadAuditHistory() {
+      this.busy = true;
+      try {
+        const q = new URLSearchParams({ entity_type: this.audQuery.entity_type });
+        if (this.audQuery.entity_id) q.set('entity_id', this.audQuery.entity_id);
+        const path = this.audQuery.user_id
+          ? `/api/audit/by-user?user_id=${this.audQuery.user_id}`
+          : `/api/audit/history?${q.toString()}`;
+        const a = await this.api('GET', path);
+        this.audit = Array.isArray(a) ? { entries: a, count: a.length } : a;
+        if (!(this.audit.entries || []).length) {
+          this.notify('Sin registros para esa consulta', 'error');
+        }
+      } catch (e) {
+        this.notify('Error al consultar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async grantPermission() {
+      this.busy = true;
+      try {
+        // API contract: permissions are granted per USER, not per role
+        const body = {
+          user_id: Number(this.permForm.user_id),
+          module: this.permForm.module,
+          action: this.permForm.action,
+        };
+        if (this.permForm.field) body.field = this.permForm.field;
+        await this.api('POST', '/api/permissions/grant', body);
+        this.notify(`Permiso otorgado: ${this.permForm.module}.${this.permForm.action}`);
+        this.permForm = { user_id: this.permForm.user_id, module: '', action: 'read', field: '' };
+        await this.loadPermissions();
+      } catch (e) {
+        this.notify('Error al otorgar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async revokePermission(p) {
+      this.busy = true;
+      try {
+        await this.api('POST', '/api/permissions/revoke', {
+          user_id: p.user_id || Number(this.permForm.user_id),
+          module: p.module, action: p.action,
+          field: p.field || undefined,
+        });
+        this.notify(`Permiso revocado: ${p.module}.${p.action}`);
+        await this.loadPermissions();
+      } catch (e) {
+        this.notify('Error al revocar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async checkPermission() {
+      this.busy = true;
+      try {
+        const q = new URLSearchParams({
+          user_id: this.checkForm.user_id || '',
+          module: this.checkForm.module,
+          action: this.checkForm.action,
+        });
+        this.checkResult = await this.api('GET', `/api/permissions/check?${q.toString()}`);
+      } catch (e) {
+        this.notify('Error al verificar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>

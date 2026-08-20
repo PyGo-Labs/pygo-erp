@@ -7,6 +7,7 @@ All models, services, and business logic live here.
 V2.0: Full CRUD + Auth/Users/Multi-tenancy.
 """
 import asyncio
+import inspect
 import os
 import socket
 import sys
@@ -157,8 +158,19 @@ class BaseModel:
         return dict(row) if row else None
     
     @classmethod
+    def _columns(cls, db):
+        """Real column names of the table, used to drop unknown keys."""
+        return {r[1] for r in db.execute(f"PRAGMA table_info({cls.table})")}
+
+    @classmethod
     def create(cls, **data):
         db = get_db()
+        # Only persist keys that exist as columns. Transport extras such as
+        # `token` used to reach the INSERT and crash it.
+        allowed = cls._columns(db)
+        data = {k: v for k, v in data.items() if k in allowed}
+        if not data:
+            return {"error": "no valid fields provided"}
         cols = ", ".join(data.keys())
         placeholders = ", ".join("?" for _ in data)
         db.execute(f"INSERT INTO {cls.table} ({cols}) VALUES ({placeholders})", list(data.values()))
@@ -168,6 +180,10 @@ class BaseModel:
     @classmethod
     def update(cls, id, **data):
         db = get_db()
+        allowed = cls._columns(db)
+        data = {k: v for k, v in data.items() if k in allowed}
+        if not data:
+            return {"error": "no valid fields provided"}
         sets = ", ".join(f"{k} = ?" for k in data)
         vals = list(data.values()) + [id]
         db.execute(f"UPDATE {cls.table} SET {sets} WHERE id = ?", vals)
@@ -357,7 +373,21 @@ def handle_request(payload: bytes) -> bytes:
         if fn is None:
             return msgpack.packb({"result": None, "error": f"Handler not found: {method}"}, use_bin_type=True)
         
-        filtered_args = {k: v for k, v in args.items() if k != "token"}
+        # Pass `token` only to handlers that actually declare it (or accept
+        # **kwargs). Blanket-stripping it broke every self-authenticating
+        # handler such as core.auth.users.*, which returned "not authenticated".
+        filtered_args = dict(args)
+        if "token" in filtered_args:
+            try:
+                sig = inspect.signature(fn)
+                accepts_token = "token" in sig.parameters or any(
+                    p.kind is inspect.Parameter.VAR_KEYWORD
+                    for p in sig.parameters.values()
+                )
+            except (TypeError, ValueError):
+                accepts_token = True
+            if not accepts_token:
+                filtered_args.pop("token")
         result = fn(**filtered_args)
         return msgpack.packb({"result": result, "error": None}, use_bin_type=True)
     except Exception as e:
