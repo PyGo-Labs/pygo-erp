@@ -110,6 +110,12 @@ from core import purchasing_receipts
 from core.migrations import purchasing  # noqa: F401
 from core.migrations import purchasing_fix  # noqa: F401
 
+# --- Accounting full (B3) ---
+from core import accounting_analytic
+from core import accounting_assets
+from core import accounting_treasury
+from core.migrations import accounting_full  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:
@@ -397,6 +403,7 @@ def init_db():
         ('core.commercial_pricing:pricelists_seed', 'pricelists'),
         ('core.commercial_terms:payment_terms_seed', 'payment_terms'),
         ('core.commercial_terms:sequences_seed', 'sequences'),
+        ('core.accounting_analytic:cost_centers_seed', 'cost_centers'),
     ]:
         mod_name, fn_name = seed_fn.split(':')
         try:

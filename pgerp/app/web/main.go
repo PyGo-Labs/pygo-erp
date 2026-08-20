@@ -691,6 +691,98 @@ func registerRoutes(app *web.App) {
 	r.Handle("POST", "/api/purchase/returns", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.purchase.returns.create", ctx)
 	}, false)
+
+	// --- B3: Cost centers & budgets ---
+	r.Handle("GET", "/api/cost-centers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cost_centers.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/cost-centers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cost_centers.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/cost-centers/allocate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cost_centers.allocate", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/cost-centers/report", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.cost_centers.report", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/budgets", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.budgets.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/budgets", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.budgets.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/budgets/vs-actual", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.budgets.vs_actual", ctx)
+	}, false)
+
+	// --- B3: Fixed assets ---
+	r.Handle("GET", "/api/assets", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.assets.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/assets", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.assets.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/assets/schedule", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.assets.schedule", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/assets/depreciate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.assets.depreciate", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/assets/dispose", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.assets.dispose", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/assets/summary", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.assets.summary", ctx)
+	}, false)
+
+	// --- B3: Payments & aging ---
+	r.Handle("GET", "/api/payments", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.payments.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/payments", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.payments.register", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/ar/aging", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.ar.aging", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/ap/aging", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.ap.aging", ctx)
+	}, false)
+
+	// --- B3: Banking ---
+	r.Handle("GET", "/api/bank/accounts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.bank.accounts.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/bank/accounts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.bank.accounts.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/bank/statements/import", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.bank.statement.import_lines", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/bank/reconcile/auto", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.bank.reconcile.auto", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/bank/reconcile/status", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.bank.reconcile.status", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {
