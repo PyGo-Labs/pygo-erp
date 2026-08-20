@@ -941,6 +941,97 @@ func registerRoutes(app *web.App) {
 	r.Handle("GET", "/api/mrp/dashboard", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.mrp.dashboard", ctx)
 	}, false)
+
+	// --- Fase A: Module system ---
+	r.Handle("GET", "/api/modules", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/modules/scan", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.scan", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/modules/info", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.info", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/modules/install", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.install", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/modules/uninstall", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.uninstall", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/modules/enable", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.enable", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/modules/disable", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.disable", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/modules/graph", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.modules.dependency_graph", ctx)
+	}, false)
+
+	// --- Fase A: Hooks ---
+	r.Handle("GET", "/api/hooks", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hooks.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hooks", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hooks.register", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hooks/run", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hooks.run", ctx)
+	}, false)
+
+	// --- Fase A: Generic tax engine ---
+	r.Handle("GET", "/api/tax", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tax.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/tax", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tax.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/tax/groups", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tax.groups.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/tax/groups", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tax.groups.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/tax/compute", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tax.compute", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/tax/compute-document", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.tax.compute_document", ctx)
+	}, false)
+
+	// --- Dynamic module handler dispatch ---
+	// Lets an installed module expose handlers without new Go routes.
+	r.Handle("POST", "/api/module/call", func(ctx map[string]interface{}) (interface{}, error) {
+		handler, ok := ctx["handler"].(string)
+		if !ok || handler == "" {
+			return map[string]interface{}{"error": "handler required"}, nil
+		}
+		delete(ctx, "handler")
+		return app.Call(handler, ctx)
+	}, false)
+
+	r.Handle("GET", "/api/module/call", func(ctx map[string]interface{}) (interface{}, error) {
+		handler, ok := ctx["handler"].(string)
+		if !ok || handler == "" {
+			return map[string]interface{}{"error": "handler required"}, nil
+		}
+		delete(ctx, "handler")
+		return app.Call(handler, ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {

@@ -126,6 +126,13 @@ from core import mrp_bom
 from core import mrp_production
 from core.migrations import mrp  # noqa: F401
 
+# --- Module system + generic tax engine (Fase A) ---
+from core import module_loader
+from core import module_manager
+from core import tax_engine
+from core.migrations import modules as _mig_modules  # noqa: F401
+from core.migrations import tax_engine as _mig_tax_engine  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:
@@ -415,6 +422,7 @@ def init_db():
         ('core.commercial_terms:sequences_seed', 'sequences'),
         ('core.accounting_analytic:cost_centers_seed', 'cost_centers'),
         ('core.hr_leave_expenses:leave_types_seed', 'leave_types'),
+        ('core.tax_engine:tax_seed_generic', 'tax_engine'),
     ]:
         mod_name, fn_name = seed_fn.split(':')
         try:
@@ -422,6 +430,21 @@ def init_db():
             getattr(mod, fn_name)()
         except Exception as e:
             print(f'{label} seed skipped: {e}', flush=True)
+
+    # Discover modules on disk and reload the ones already installed
+    try:
+        sync = module_loader.sync_registry()
+        print(f"Modules discovered: {sync['discovered']} "
+              f"(added {sync['added']}, updated {sync['updated']})", flush=True)
+
+        installed = db.execute(
+            "SELECT name, path FROM modules WHERE state = 'installed'"
+        ).fetchall()
+        for m in installed:
+            ok, err = module_loader.load_module_code(m['name'], m['path'])
+            print(f"  module {m['name']}: {'loaded' if ok else 'FAILED: ' + str(err)}", flush=True)
+    except Exception as e:
+        print(f'module sync skipped: {e}', flush=True)
 
 def main():
     import argparse

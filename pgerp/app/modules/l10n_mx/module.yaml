@@ -1,0 +1,8 @@
+name: l10n_mx
+display_name: Mexico Localization
+version: 1.0.0
+category: localization
+author: PyGo Labs
+summary: Mexican taxes (IVA, ISR, IEPS), retentions and DIOT support
+depends: [core]
+auto_install: false
