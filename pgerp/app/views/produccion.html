@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Producción — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4 flex-wrap">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/contabilidad" class="hover:text-warn">Contabilidad</a>
+    <a href="/tesoreria" class="hover:text-warn">Tesorería</a>
+    <a href="/rrhh" class="hover:text-warn">RRHH</a>
+    <a href="/produccion" class="text-warn font-medium">Producción</a>
+  </div>
+</nav>
+
+<div x-data="mrp()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+  <h1 class="text-2xl font-bold mb-6">Producción</h1>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Borrador</div>
+      <div class="text-2xl font-bold" x-text="(dashboard.orders_by_status || {}).draft ?? 0"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">En proceso</div>
+      <div class="text-2xl font-bold text-warn"
+           x-text="(dashboard.orders_by_status || {}).in_progress ?? 0"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Terminadas</div>
+      <div class="text-2xl font-bold text-ok"
+           x-text="(dashboard.orders_by_status || {}).done ?? 0"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Unidades producidas</div>
+      <div class="text-2xl font-bold" x-text="dashboard.total_produced_qty ?? 0"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Costo producción</div>
+      <div class="text-2xl font-bold text-brand" x-text="money(dashboard.total_production_cost)"></div>
+    </div>
+  </div>
+
+  <div class="flex gap-1 mb-6 border-b border-gray-200 flex-wrap">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+              class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+              :class="tab === t.id ? 'border-brand text-brand'
+                                   : 'border-transparent text-gray-500 hover:text-gray-800'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <!-- ===== BOM ===== -->
+  <template x-if="tab === 'bom'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-1">Nueva lista de materiales</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          Si un componente tiene su propia lista, la explosión la resuelve en cascada.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">Producto terminado *</label>
+            <select x-model="bForm.producto_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Selecciona…</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="p.codigo + ' · ' + p.nombre"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Cantidad producida</label>
+            <input x-model.number="bForm.quantity" type="number" min="1" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Ruta de fabricación</label>
+            <select x-model="bForm.routing_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Sin ruta</option>
+              <template x-for="r in routings" :key="r.id">
+                <option :value="r.id" x-text="r.name"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
+        <label class="block text-sm font-medium mb-2">Componentes</label>
+        <template x-for="(l, i) in bForm.lines" :key="i">
+          <div class="flex gap-2 mb-2">
+            <select x-model="l.component_id" class="flex-1 border border-gray-300 rounded px-3 py-2">
+              <option value="">Componente…</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="p.codigo + ' · ' + p.nombre"></option>
+              </template>
+            </select>
+            <input x-model.number="l.quantity" type="number" min="0.01" step="0.01" placeholder="Cant."
+                   class="w-28 border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="l.scrap_pct" type="number" min="0" max="100" step="0.1"
+                   placeholder="% merma"
+                   class="w-28 border border-gray-300 rounded px-3 py-2">
+            <button @click="bForm.lines.splice(i,1)" x-show="bForm.lines.length > 1"
+                    class="px-3 text-red-500 hover:text-red-700">×</button>
+          </div>
+        </template>
+        <button @click="bForm.lines.push({component_id:'', quantity:1, scrap_pct:0})"
+                class="text-sm text-brand hover:underline">+ Agregar componente</button>
+
+        <div class="mt-4">
+          <button @click="createBom()" :disabled="busy || !canCreateBom"
+                  class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+            Crear lista
+          </button>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Listas de materiales (<span x-text="boms.length"></span>)
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Producto</th>
+              <th class="px-4 py-2">Código</th>
+              <th class="px-4 py-2 text-right">Produce</th>
+              <th class="px-4 py-2 text-right">Componentes</th>
+              <th class="px-4 py-2">Ruta</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="b in boms" :key="b.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium" x-text="b.producto_nombre || b.producto_id"></td>
+                <td class="px-4 py-2 font-mono text-xs" x-text="b.code || '—'"></td>
+                <td class="px-4 py-2 text-right" x-text="b.quantity"></td>
+                <td class="px-4 py-2 text-right" x-text="(b.lines || []).length"></td>
+                <td class="px-4 py-2 text-gray-600" x-text="b.routing_name || '—'"></td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5">
+                    <button @click="explode(b.producto_id)"
+                            class="text-xs px-2 py-1 rounded bg-brand text-white">Explosionar</button>
+                    <button @click="costBom(b.producto_id)"
+                            class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                      Costear
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!boms.length">
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Sin listas</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Explosion result -->
+      <template x-if="explosion.tree">
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h2 class="font-semibold" x-text="'Explosión · ' + explosion.producto"></h2>
+              <p class="text-sm text-gray-500">
+                Para <span class="font-medium" x-text="explosion.quantity"></span> unidades ·
+                material <span class="font-medium" x-text="money(explosion.total_material_cost)"></span>
+              </p>
+            </div>
+            <div class="flex gap-2 items-center">
+              <input x-model.number="explodeQty" type="number" min="1"
+                     class="w-24 border border-gray-300 rounded px-2 py-1 text-sm">
+              <button @click="explode(explosion.producto_id)"
+                      class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                Recalcular
+              </button>
+              <button @click="explosion = {}" class="text-gray-400 hover:text-gray-700">×</button>
+            </div>
+          </div>
+
+          <h3 class="text-sm font-semibold mb-2">Estructura multinivel</h3>
+          <div class="border border-gray-200 rounded p-3 mb-4 text-sm">
+            <template x-for="n in flatTree(explosion.tree)" :key="n.key">
+              <div class="flex justify-between py-1"
+                   :style="`padding-left: ${(n.level - 1) * 20}px`">
+                <span>
+                  <span x-show="n.is_subassembly" class="text-brand font-medium">▾ </span>
+                  <span x-show="!n.is_subassembly" class="text-gray-400">· </span>
+                  <span class="font-mono text-xs text-gray-500" x-text="n.component_codigo"></span>
+                  <span x-text="' ' + n.component_nombre"></span>
+                  <span x-show="n.scrap_pct" class="text-xs text-warn"
+                        x-text="' (+' + n.scrap_pct + '% merma)'"></span>
+                </span>
+                <span class="font-medium" x-text="n.qty_required"></span>
+              </div>
+            </template>
+          </div>
+
+          <h3 class="text-sm font-semibold mb-2">Materia prima requerida</h3>
+          <table class="w-full text-sm border border-gray-200 rounded">
+            <thead class="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th class="px-3 py-2">Componente</th>
+                <th class="px-3 py-2 text-right">Cantidad</th>
+                <th class="px-3 py-2 text-right">Costo unit.</th>
+                <th class="px-3 py-2 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="m in explosion.raw_materials" :key="m.component_id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-3 py-2">
+                    <span class="font-mono text-xs text-gray-500" x-text="m.component_codigo"></span>
+                    <span x-text="' ' + m.component_nombre"></span>
+                  </td>
+                  <td class="px-3 py-2 text-right font-medium" x-text="m.qty_required"></td>
+                  <td class="px-3 py-2 text-right" x-text="money(m.unit_cost)"></td>
+                  <td class="px-3 py-2 text-right font-medium" x-text="money(m.total_cost)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </section>
+      </template>
+
+      <!-- Cost result -->
+      <template x-if="costing.total_cost !== undefined">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+          <div class="flex justify-between items-start mb-4">
+            <h2 class="font-semibold" x-text="'Costeo · ' + costing.producto"></h2>
+            <button @click="costing = {}" class="text-gray-400 hover:text-gray-700">×</button>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+            <div class="border border-gray-200 rounded p-3">
+              <div class="text-xs uppercase text-gray-500">Material</div>
+              <div class="text-lg font-bold" x-text="money(costing.material_cost)"></div>
+            </div>
+            <div class="border border-gray-200 rounded p-3">
+              <div class="text-xs uppercase text-gray-500">Mano de obra</div>
+              <div class="text-lg font-bold" x-text="money(costing.labor_cost)"></div>
+            </div>
+            <div class="border border-blue-200 bg-blue-50 rounded p-3">
+              <div class="text-xs uppercase text-gray-500">Total</div>
+              <div class="text-lg font-bold text-brand" x-text="money(costing.total_cost)"></div>
+            </div>
+            <div class="border border-green-200 bg-green-50 rounded p-3">
+              <div class="text-xs uppercase text-gray-500">Costo unitario</div>
+              <div class="text-lg font-bold text-ok" x-text="money(costing.unit_cost)"></div>
+            </div>
+          </div>
+
+          <template x-if="(costing.operations || []).length">
+            <table class="w-full text-sm border border-gray-200 rounded">
+              <thead class="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th class="px-3 py-2">Sec.</th>
+                  <th class="px-3 py-2">Operación</th>
+                  <th class="px-3 py-2">Centro de trabajo</th>
+                  <th class="px-3 py-2 text-right">Minutos</th>
+                  <th class="px-3 py-2 text-right">Costo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="o in costing.operations" :key="o.sequence">
+                  <tr class="border-t border-gray-100">
+                    <td class="px-3 py-2 text-gray-500" x-text="o.sequence"></td>
+                    <td class="px-3 py-2" x-text="o.name"></td>
+                    <td class="px-3 py-2 text-gray-600" x-text="o.work_center || '—'"></td>
+                    <td class="px-3 py-2 text-right" x-text="o.minutes"></td>
+                    <td class="px-3 py-2 text-right font-medium" x-text="money(o.cost)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </template>
+        </section>
+      </template>
+    </div>
+  </template>
+  <!-- ===== PRODUCTION ORDERS ===== -->
+  <template x-if="tab === 'orders'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nueva orden de producción</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div class="md:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">Producto a fabricar *</label>
+            <select x-model="oForm.producto_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Selecciona…</option>
+              <template x-for="b in boms" :key="b.id">
+                <option :value="b.producto_id" x-text="b.producto_nombre || b.producto_id"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Cantidad *</label>
+            <input x-model.number="oForm.quantity" type="number" min="1" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Almacén</label>
+            <select x-model="oForm.warehouse_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+        <button @click="createOrder()" :disabled="busy || !oForm.producto_id || !oForm.quantity"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Crear orden
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Órdenes de producción — borrador → en proceso → terminada
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Folio</th>
+              <th class="px-4 py-2">Producto</th>
+              <th class="px-4 py-2 text-right">Plan</th>
+              <th class="px-4 py-2 text-right">Producido</th>
+              <th class="px-4 py-2 text-right">Costo</th>
+              <th class="px-4 py-2">Estado</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="o in orders" :key="o.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs" x-text="o.folio || ('#'+o.id)"></td>
+                <td class="px-4 py-2" x-text="o.producto_nombre || o.producto_id"></td>
+                <td class="px-4 py-2 text-right" x-text="o.quantity"></td>
+                <td class="px-4 py-2 text-right font-medium"
+                    x-text="o.quantity_produced || '—'"></td>
+                <td class="px-4 py-2 text-right" x-text="money(o.total_cost)"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs px-2 py-0.5 rounded" :class="badge(o.status)"
+                        x-text="statusLabel(o.status)"></span>
+                </td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5 flex-wrap">
+                    <button @click="checkAvailability(o.id)"
+                            class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                      Materiales
+                    </button>
+                    <button x-show="o.status === 'draft'" @click="startOrder(o.id)"
+                            class="text-xs px-2 py-1 rounded bg-brand text-white">Iniciar</button>
+                    <button x-show="o.status === 'in_progress'" @click="openComplete(o)"
+                            class="text-xs px-2 py-1 rounded bg-ok text-white">Terminar</button>
+                    <button x-show="['draft','in_progress'].includes(o.status)"
+                            @click="cancelOrder(o.id)"
+                            class="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                      Cancelar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!orders.length">
+              <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Sin órdenes</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Availability -->
+      <template x-if="availability.materials">
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <h2 class="font-semibold">Disponibilidad de materiales</h2>
+              <p class="text-sm" :class="availability.can_produce ? 'text-ok' : 'text-red-600'"
+                 x-text="availability.can_produce
+                   ? '✓ Hay material suficiente para producir'
+                   : '✗ Falta material — la orden no puede iniciar'"></p>
+            </div>
+            <button @click="availability = {}" class="text-gray-400 hover:text-gray-700">×</button>
+          </div>
+          <table class="w-full text-sm border border-gray-200 rounded">
+            <thead class="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th class="px-3 py-2">Componente</th>
+                <th class="px-3 py-2 text-right">Requerido</th>
+                <th class="px-3 py-2 text-right">Disponible</th>
+                <th class="px-3 py-2 text-right">Faltante</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="m in availability.materials" :key="m.component_id">
+                <tr class="border-t border-gray-100"
+                    :class="m.sufficient ? '' : 'bg-red-50'">
+                  <td class="px-3 py-2" x-text="m.component"></td>
+                  <td class="px-3 py-2 text-right" x-text="m.required"></td>
+                  <td class="px-3 py-2 text-right" x-text="m.available"></td>
+                  <td class="px-3 py-2 text-right font-medium"
+                      :class="m.shortage ? 'text-red-600' : 'text-ok'"
+                      x-text="m.shortage || '—'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </section>
+      </template>
+
+      <!-- Complete form -->
+      <template x-if="completeFor">
+        <section class="bg-white rounded-lg border-2 border-ok p-6">
+          <h2 class="font-semibold mb-1">Terminar orden</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Plan: <span class="font-medium" x-text="completeFor.quantity"></span> unidades.
+            Puedes registrar menos si hubo merma; el costo se ajusta proporcionalmente.
+          </p>
+          <div class="flex gap-3 items-end">
+            <div>
+              <label class="block text-sm font-medium mb-1">Cantidad producida *</label>
+              <input x-model.number="producedQty" type="number" min="0.01"
+                     :max="completeFor.quantity" step="0.01"
+                     class="border border-gray-300 rounded px-3 py-2">
+            </div>
+            <button @click="completeOrder()" :disabled="busy || !producedQty"
+                    class="bg-ok text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Terminar
+            </button>
+            <button @click="completeFor = null"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+          </div>
+        </section>
+      </template>
+    </div>
+  </template>
+
+  <!-- ===== WORK CENTERS & ROUTINGS ===== -->
+  <template x-if="tab === 'centers'">
+    <div class="space-y-6">
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-4">Centros de trabajo</h2>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
+          <input x-model="wForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2 md:col-span-2">
+          <input x-model="wForm.code" placeholder="Código"
+                 class="border border-gray-300 rounded px-3 py-2 uppercase">
+          <input x-model.number="wForm.cost_per_hour" type="number" step="0.01"
+                 placeholder="Costo/hora"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model.number="wForm.efficiency_pct" type="number" min="1" max="200"
+                 placeholder="% eficiencia"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+        <button @click="createWorkCenter()" :disabled="busy || !wForm.name"
+                class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Crear centro
+        </button>
+
+        <table class="w-full text-sm mt-4 border border-gray-200 rounded">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-3 py-2">Centro</th>
+              <th class="px-3 py-2">Código</th>
+              <th class="px-3 py-2 text-right">Costo/hora</th>
+              <th class="px-3 py-2 text-right">Eficiencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="w in workCenters" :key="w.id">
+              <tr class="border-t border-gray-100">
+                <td class="px-3 py-2 font-medium" x-text="w.name"></td>
+                <td class="px-3 py-2 font-mono text-xs" x-text="w.code || '—'"></td>
+                <td class="px-3 py-2 text-right" x-text="money(w.cost_per_hour)"></td>
+                <td class="px-3 py-2 text-right" x-text="(w.efficiency_pct ?? 100) + '%'"></td>
+              </tr>
+            </template>
+            <template x-if="!workCenters.length">
+              <tr><td colspan="4" class="px-3 py-6 text-center text-gray-400">Sin centros</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-4">Rutas de fabricación</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <input x-model="rForm.name" placeholder="Nombre de la ruta *"
+                 class="border border-gray-300 rounded px-3 py-2 md:col-span-2">
+          <input x-model="rForm.code" placeholder="Código"
+                 class="border border-gray-300 rounded px-3 py-2 uppercase">
+        </div>
+
+        <label class="block text-sm font-medium mb-2">Operaciones</label>
+        <template x-for="(o, i) in rForm.operations" :key="i">
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <input x-model.number="o.sequence" type="number" placeholder="Sec."
+                   class="border border-gray-300 rounded px-2 py-1.5">
+            <input x-model="o.name" placeholder="Operación"
+                   class="border border-gray-300 rounded px-2 py-1.5">
+            <select x-model="o.work_center_id" class="border border-gray-300 rounded px-2 py-1.5">
+              <option value="">Centro…</option>
+              <template x-for="w in workCenters" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+            <input x-model.number="o.setup_minutes" type="number" step="0.1"
+                   placeholder="Min. preparación"
+                   class="border border-gray-300 rounded px-2 py-1.5">
+            <div class="flex gap-1">
+              <input x-model.number="o.minutes_per_unit" type="number" step="0.1"
+                     placeholder="Min/unidad"
+                     class="flex-1 border border-gray-300 rounded px-2 py-1.5">
+              <button @click="rForm.operations.splice(i,1)" x-show="rForm.operations.length > 1"
+                      class="px-2 text-red-500 hover:text-red-700">×</button>
+            </div>
+          </div>
+        </template>
+        <button @click="rForm.operations.push({sequence: (rForm.operations.length+1)*10, name:'', work_center_id:'', setup_minutes:0, minutes_per_unit:0})"
+                class="text-sm text-brand hover:underline">+ Agregar operación</button>
+
+        <div class="mt-4">
+          <button @click="createRouting()" :disabled="busy || !rForm.name"
+                  class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+            Crear ruta
+          </button>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          <template x-for="r in routings" :key="r.id">
+            <div class="border border-gray-200 rounded p-3">
+              <div class="font-medium text-sm mb-2">
+                <span x-text="r.name"></span>
+                <span class="text-xs text-gray-400 font-mono" x-text="r.code ? ' · ' + r.code : ''"></span>
+              </div>
+              <template x-for="o in (r.operations || [])" :key="o.id">
+                <div class="flex justify-between text-xs py-0.5 text-gray-600">
+                  <span>
+                    <span class="text-gray-400" x-text="o.sequence + '. '"></span>
+                    <span x-text="o.name"></span>
+                    <span class="text-gray-400" x-text="o.work_center_name ? ' @ ' + o.work_center_name : ''"></span>
+                  </span>
+                  <span x-text="(o.setup_minutes || 0) + ' + ' + (o.minutes_per_unit || 0) + ' min/u'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </section>
+    </div>
+  </template>
+</div>
+<script>
+function mrp() {
+  return {
+    tab: 'bom',
+    tabs: [
+      { id: 'bom', label: 'Listas de materiales' },
+      { id: 'orders', label: 'Órdenes de producción' },
+      { id: 'centers', label: 'Centros y rutas' },
+    ],
+    boms: [], orders: [], workCenters: [], routings: [],
+    productos: [], warehouses: [],
+    dashboard: {}, explosion: {}, costing: {}, availability: {},
+    explodeQty: 1,
+    completeFor: null, producedQty: null,
+    bForm: { producto_id: '', quantity: 1, routing_id: '',
+             lines: [{ component_id: '', quantity: 1, scrap_pct: 0 }] },
+    oForm: { producto_id: '', quantity: 1, warehouse_id: '' },
+    wForm: { name: '', code: '', cost_per_hour: null, efficiency_pct: 100 },
+    rForm: { name: '', code: '',
+             operations: [{ sequence: 10, name: '', work_center_id: '',
+                            setup_minutes: 0, minutes_per_unit: 0 }] },
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    statusLabels: {
+      draft: 'Borrador', in_progress: 'En proceso',
+      done: 'Terminada', cancelled: 'Cancelada',
+    },
+    statusLabel(s) { return this.statusLabels[s] || s || '—' },
+
+    badge(s) {
+      return {
+        draft: 'bg-gray-100 text-gray-700',
+        in_progress: 'bg-amber-50 text-warn',
+        done: 'bg-green-50 text-ok',
+        cancelled: 'bg-red-50 text-red-700',
+      }[s] || 'bg-gray-100 text-gray-600';
+    },
+
+    money(v) {
+      return Number(v || 0).toLocaleString('es-MX',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    get canCreateBom() {
+      return this.bForm.producto_id &&
+             this.bForm.lines.some(l => l.component_id && l.quantity > 0);
+    },
+
+    // Flatten the recursive explosion tree for indented display
+    flatTree(nodes, level = 1, out = null, prefix = '') {
+      out = out || [];
+      (nodes || []).forEach((n, i) => {
+        const key = `${prefix}${level}-${i}-${n.component_id}`;
+        out.push({ ...n, level, key });
+        if (n.children) this.flatTree(n.children, level + 1, out, key + '.');
+      });
+      return out;
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 7000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadBoms(), this.loadOrders(), this.loadCenters(),
+        this.loadDashboard(), this.loadRefs(),
+      ]);
+    },
+
+    async loadBoms() {
+      try {
+        const b = await this.api('GET', '/api/mrp/boms');
+        this.boms = Array.isArray(b) ? b : (b.boms || []);
+      } catch (e) { this.notify('Error al cargar listas: ' + e.message, 'error') }
+    },
+
+    async loadOrders() {
+      try {
+        const o = await this.api('GET', '/api/mrp/production');
+        this.orders = Array.isArray(o) ? o : (o.orders || []);
+      } catch (e) {}
+    },
+
+    async loadCenters() {
+      try {
+        const w = await this.api('GET', '/api/mrp/work-centers');
+        this.workCenters = Array.isArray(w) ? w : (w.work_centers || []);
+      } catch (e) {}
+      try {
+        const r = await this.api('GET', '/api/mrp/routings');
+        this.routings = Array.isArray(r) ? r : (r.routings || []);
+      } catch (e) {}
+    },
+
+    async loadDashboard() {
+      try { this.dashboard = await this.api('GET', '/api/mrp/dashboard') || {} } catch (e) {}
+    },
+
+    async loadRefs() {
+      try { this.productos = await this.api('GET', '/api/productos') || [] } catch (e) {}
+      try {
+        this.warehouses = await this.api('GET', '/api/inventory/warehouses') || [];
+        if (this.warehouses.length && !this.oForm.warehouse_id) {
+          this.oForm.warehouse_id = this.warehouses[0].id;
+        }
+      } catch (e) {}
+    },
+
+    async createBom() {
+      if (!this.canCreateBom) return;
+      this.busy = true;
+      try {
+        const lines = this.bForm.lines
+          .filter(l => l.component_id && l.quantity > 0)
+          .map(l => ({ component_id: Number(l.component_id),
+                       quantity: Number(l.quantity),
+                       scrap_pct: Number(l.scrap_pct || 0) }));
+        const r = await this.api('POST', '/api/mrp/boms', {
+          producto_id: Number(this.bForm.producto_id),
+          quantity: Number(this.bForm.quantity || 1),
+          routing_id: this.bForm.routing_id ? Number(this.bForm.routing_id) : undefined,
+          lines,
+        });
+        this.notify(`Lista creada · ${r.lines} componentes`);
+        this.bForm = { producto_id: '', quantity: 1, routing_id: '',
+                       lines: [{ component_id: '', quantity: 1, scrap_pct: 0 }] };
+        await this.loadBoms();
+      } catch (e) {
+        this.notify('Error al crear la lista: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async explode(productoId) {
+      this.busy = true;
+      try {
+        const qty = this.explodeQty > 0 ? this.explodeQty : 1;
+        this.explosion = await this.api('GET',
+          `/api/mrp/boms/explode?producto_id=${productoId}&quantity=${qty}`);
+        this.costing = {};
+      } catch (e) {
+        this.notify('Error al explosionar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async costBom(productoId) {
+      this.busy = true;
+      try {
+        const qty = this.explodeQty > 0 ? this.explodeQty : 1;
+        this.costing = await this.api('GET',
+          `/api/mrp/boms/cost?producto_id=${productoId}&quantity=${qty}`);
+        this.explosion = {};
+      } catch (e) {
+        this.notify('Error al costear: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createOrder() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/mrp/production', {
+          producto_id: Number(this.oForm.producto_id),
+          quantity: Number(this.oForm.quantity),
+          warehouse_id: this.oForm.warehouse_id ? Number(this.oForm.warehouse_id) : undefined,
+        });
+        this.notify(`Orden ${r.folio || '#' + r.id} creada · material ${this.money(r.material_cost)}` +
+          ` + obra ${this.money(r.labor_cost)} = ${this.money(r.total_cost)}`);
+        this.oForm.producto_id = '';
+        this.oForm.quantity = 1;
+        await Promise.all([this.loadOrders(), this.loadDashboard()]);
+      } catch (e) {
+        this.notify('Error al crear la orden: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async checkAvailability(orderId) {
+      this.busy = true;
+      try {
+        this.availability = await this.api('GET',
+          `/api/mrp/production/availability?order_id=${orderId}`);
+      } catch (e) {
+        this.notify('Error al verificar materiales: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async startOrder(orderId) {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/mrp/production/start', { order_id: orderId });
+        this.notify(`Orden iniciada · material consumido ${this.money(r.materials_consumed_value)}`);
+        this.availability = {};
+        await Promise.all([this.loadOrders(), this.loadDashboard()]);
+      } catch (e) {
+        this.notify('No se pudo iniciar: ' + e.message, 'error');
+        await this.checkAvailability(orderId);
+      } finally { this.busy = false }
+    },
+
+    openComplete(order) {
+      this.completeFor = order;
+      this.producedQty = Number(order.quantity);
+    },
+
+    async completeOrder() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/mrp/production/complete', {
+          order_id: this.completeFor.id,
+          quantity_produced: Number(this.producedQty),
+        });
+        this.notify(`Orden terminada · ${r.quantity_produced}/${r.quantity_planned}` +
+          ` (${r.yield_pct}% rendimiento) · costo unitario ${this.money(r.unit_cost)}`);
+        this.completeFor = null;
+        await Promise.all([this.loadOrders(), this.loadDashboard()]);
+      } catch (e) {
+        this.notify('Error al terminar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async cancelOrder(orderId) {
+      if (!confirm('¿Cancelar la orden? Si ya consumió material, se devolverá al almacén.')) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/mrp/production/cancel', { order_id: orderId });
+        this.notify(`Orden cancelada` +
+          (r.materials_returned ? ` · ${r.materials_returned} materiales devueltos` : ''));
+        await Promise.all([this.loadOrders(), this.loadDashboard()]);
+      } catch (e) {
+        this.notify('Error al cancelar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createWorkCenter() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/mrp/work-centers', {
+          name: this.wForm.name,
+          code: (this.wForm.code || '').toUpperCase() || undefined,
+          cost_per_hour: Number(this.wForm.cost_per_hour || 0),
+          efficiency_pct: Number(this.wForm.efficiency_pct || 100),
+        });
+        this.notify(`Centro de trabajo creado: ${r.name}`);
+        this.wForm = { name: '', code: '', cost_per_hour: null, efficiency_pct: 100 };
+        await this.loadCenters();
+      } catch (e) {
+        this.notify('Error al crear el centro: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createRouting() {
+      this.busy = true;
+      try {
+        const operations = this.rForm.operations
+          .filter(o => o.name)
+          .map(o => ({
+            sequence: Number(o.sequence || 10),
+            name: o.name,
+            work_center_id: o.work_center_id ? Number(o.work_center_id) : undefined,
+            setup_minutes: Number(o.setup_minutes || 0),
+            minutes_per_unit: Number(o.minutes_per_unit || 0),
+          }));
+        const r = await this.api('POST', '/api/mrp/routings', {
+          name: this.rForm.name,
+          code: (this.rForm.code || '').toUpperCase() || undefined,
+          operations,
+        });
+        this.notify(`Ruta creada: ${r.name} · ${r.operations} operaciones`);
+        this.rForm = { name: '', code: '',
+                       operations: [{ sequence: 10, name: '', work_center_id: '',
+                                      setup_minutes: 0, minutes_per_unit: 0 }] };
+        await this.loadCenters();
+      } catch (e) {
+        this.notify('Error al crear la ruta: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>

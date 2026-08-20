@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recursos Humanos — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4 flex-wrap">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/contabilidad" class="hover:text-warn">Contabilidad</a>
+    <a href="/tesoreria" class="hover:text-warn">Tesorería</a>
+    <a href="/rrhh" class="text-warn font-medium">RRHH</a>
+    <a href="/produccion" class="hover:text-warn">Producción</a>
+  </div>
+</nav>
+
+<div x-data="rrhh()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+  <h1 class="text-2xl font-bold mb-6">Recursos Humanos</h1>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Empleados activos</div>
+      <div class="text-2xl font-bold" x-text="headcount.active_employees ?? 0"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Con contrato</div>
+      <div class="text-2xl font-bold" x-text="headcount.with_active_contract ?? 0"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Nómina mensual</div>
+      <div class="text-2xl font-bold text-brand" x-text="money(headcount.monthly_payroll_cost)"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Nómina anual</div>
+      <div class="text-2xl font-bold text-ok" x-text="money(headcount.annual_payroll_cost)"></div>
+    </div>
+  </div>
+
+  <template x-if="(headcount.by_department || []).length">
+    <section class="bg-white rounded-lg border border-gray-200 p-5 mb-6">
+      <h2 class="font-semibold mb-3">Plantilla por departamento</h2>
+      <div class="space-y-2">
+        <template x-for="d in headcount.by_department" :key="d.department">
+          <div>
+            <div class="flex justify-between text-sm mb-1">
+              <span x-text="d.department"></span>
+              <span class="font-medium" x-text="d.headcount"></span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="h-2 rounded-full bg-brand"
+                   :style="`width: ${maxDept ? (d.headcount / maxDept * 100) : 0}%`"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+  </template>
+
+  <div class="flex gap-1 mb-6 border-b border-gray-200 flex-wrap">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+              class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+              :class="tab === t.id ? 'border-brand text-brand'
+                                   : 'border-transparent text-gray-500 hover:text-gray-800'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <!-- ===== EMPLOYEES ===== -->
+  <template x-if="tab === 'employees'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nuevo empleado</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <input x-model="eForm.first_name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="eForm.last_name" placeholder="Apellido *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="eForm.email" type="email" placeholder="Email"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Fecha de ingreso</label>
+            <input x-model="eForm.hire_date" type="date"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Departamento</label>
+            <select x-model="eForm.department_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Sin asignar</option>
+              <template x-for="d in departments" :key="d.id">
+                <option :value="d.id" x-text="d.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Puesto</label>
+            <select x-model="eForm.position_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Sin asignar</option>
+              <template x-for="p in positions" :key="p.id">
+                <option :value="p.id" x-text="p.title"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Jefe directo</label>
+            <select x-model="eForm.manager_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Sin asignar</option>
+              <template x-for="m in employees" :key="m.id">
+                <option :value="m.id" x-text="m.first_name + ' ' + m.last_name"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+        <button @click="createEmployee()"
+                :disabled="busy || !eForm.first_name || !eForm.last_name"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Registrar empleado
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="font-semibold">Empleados</h2>
+          <select x-model="empStatus" @change="loadEmployees()"
+                  class="text-sm border border-gray-300 rounded px-2 py-1">
+            <option value="active">Activos</option>
+            <option value="terminated">Dados de baja</option>
+          </select>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Nombre</th>
+              <th class="px-4 py-2">Puesto</th>
+              <th class="px-4 py-2">Departamento</th>
+              <th class="px-4 py-2">Ingreso</th>
+              <th class="px-4 py-2 text-right">Sueldo</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="e in employees" :key="e.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2">
+                  <span class="font-medium" x-text="e.first_name + ' ' + e.last_name"></span>
+                  <div class="text-xs text-gray-400" x-text="e.email || ''"></div>
+                </td>
+                <td class="px-4 py-2" x-text="e.position_title || '—'"></td>
+                <td class="px-4 py-2" x-text="e.department_name || '—'"></td>
+                <td class="px-4 py-2 text-xs text-gray-500" x-text="e.hire_date || '—'"></td>
+                <td class="px-4 py-2 text-right">
+                  <template x-if="e.active_contract">
+                    <span>
+                      <span class="font-medium" x-text="money(e.active_contract.wage)"></span>
+                      <span class="text-xs text-gray-400" x-text="' / ' + periodLabel(e.active_contract.wage_period)"></span>
+                    </span>
+                  </template>
+                  <template x-if="!e.active_contract">
+                    <span class="text-xs text-warn">sin contrato</span>
+                  </template>
+                </td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5">
+                    <button @click="openContract(e)"
+                            class="text-xs px-2 py-1 rounded bg-brand text-white">Contrato</button>
+                    <button @click="loadBalance(e)"
+                            class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                      Saldos
+                    </button>
+                    <button x-show="e.status === 'active'" @click="terminate(e)"
+                            class="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                      Baja
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!employees.length">
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Sin empleados</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Contract form -->
+      <template x-if="contractFor">
+        <section class="bg-white rounded-lg border-2 border-brand p-6 mb-6">
+          <h2 class="font-semibold mb-1">Nuevo contrato</h2>
+          <p class="text-sm text-gray-500 mb-4"
+             x-text="contractFor.first_name + ' ' + contractFor.last_name +
+                     ' — el contrato activo anterior se cierra automáticamente'"></p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Sueldo *</label>
+              <input x-model.number="cForm.wage" type="number" step="0.01"
+                     class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Periodicidad</label>
+              <select x-model="cForm.wage_period" class="w-full border border-gray-300 rounded px-3 py-2">
+                <option value="monthly">Mensual</option>
+                <option value="annual">Anual</option>
+                <option value="daily">Diario</option>
+                <option value="hourly">Por hora</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Tipo</label>
+              <select x-model="cForm.contract_type" class="w-full border border-gray-300 rounded px-3 py-2">
+                <option value="permanent">Indefinido</option>
+                <option value="fixed_term">Temporal</option>
+                <option value="part_time">Medio tiempo</option>
+                <option value="intern">Prácticas</option>
+                <option value="contractor">Honorarios</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Inicio</label>
+              <input x-model="cForm.date_start" type="date"
+                     class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+          </div>
+          <div class="flex gap-2 mt-4">
+            <button @click="contractFor = null"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+            <button @click="createContract()" :disabled="busy || !cForm.wage"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Crear contrato
+            </button>
+          </div>
+        </section>
+      </template>
+
+      <!-- Leave balance -->
+      <template x-if="balance.balances">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+          <div class="flex justify-between items-start mb-4">
+            <h2 class="font-semibold">
+              Saldos de ausencias <span class="text-sm font-normal text-gray-500"
+                                        x-text="'· ' + balance.year"></span>
+            </h2>
+            <button @click="balance = {}" class="text-gray-400 hover:text-gray-700">×</button>
+          </div>
+          <table class="w-full text-sm border border-gray-200 rounded">
+            <thead class="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th class="px-3 py-2">Tipo</th>
+                <th class="px-3 py-2 text-right">Derecho</th>
+                <th class="px-3 py-2 text-right">Tomado</th>
+                <th class="px-3 py-2 text-right">Pendiente</th>
+                <th class="px-3 py-2 text-right">Disponible</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="b in balance.balances" :key="b.code">
+                <tr class="border-t border-gray-100">
+                  <td class="px-3 py-2" x-text="b.leave_type"></td>
+                  <td class="px-3 py-2 text-right" x-text="b.allowance"></td>
+                  <td class="px-3 py-2 text-right text-gray-600" x-text="b.taken"></td>
+                  <td class="px-3 py-2 text-right text-warn" x-text="b.pending"></td>
+                  <td class="px-3 py-2 text-right font-medium text-ok" x-text="b.remaining"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </section>
+      </template>
+    </div>
+  </template>
+  <!-- ===== LEAVE ===== -->
+  <template x-if="tab === 'leave'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-1">Solicitar ausencia</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          Se cuentan solo días hábiles. Se valida solapamiento y saldo disponible.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <select x-model="lForm.employee_id" class="border border-gray-300 rounded px-3 py-2">
+            <option value="">Empleado *</option>
+            <template x-for="e in employees" :key="e.id">
+              <option :value="e.id" x-text="e.first_name + ' ' + e.last_name"></option>
+            </template>
+          </select>
+          <select x-model="lForm.leave_type_id" class="border border-gray-300 rounded px-3 py-2">
+            <option value="">Tipo *</option>
+            <template x-for="t in leaveTypes" :key="t.id">
+              <option :value="t.id"
+                      x-text="t.name + (t.days_per_year ? ' (' + t.days_per_year + ' d)' : '')"></option>
+            </template>
+          </select>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Desde *</label>
+            <input x-model="lForm.date_from" type="date"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Hasta *</label>
+            <input x-model="lForm.date_to" type="date"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+        </div>
+        <input x-model="lForm.reason" placeholder="Motivo"
+               class="mt-3 w-full border border-gray-300 rounded px-3 py-2">
+        <button @click="requestLeave()" :disabled="busy || !canRequestLeave"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Solicitar
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="font-semibold">Solicitudes</h2>
+          <div class="flex gap-1.5">
+            <template x-for="f in ['todas','pending','approved','rejected']" :key="f">
+              <button @click="leaveFilter = f"
+                      class="text-xs px-2 py-1 rounded border"
+                      :class="leaveFilter === f ? 'bg-brand text-white border-brand'
+                                                : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
+                      x-text="statusLabel(f)"></button>
+            </template>
+          </div>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Empleado</th>
+              <th class="px-4 py-2">Tipo</th>
+              <th class="px-4 py-2">Periodo</th>
+              <th class="px-4 py-2 text-right">Días</th>
+              <th class="px-4 py-2">Estado</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="l in filteredLeave" :key="l.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2" x-text="l.employee_name || l.employee_id"></td>
+                <td class="px-4 py-2" x-text="l.leave_type_name || '—'"></td>
+                <td class="px-4 py-2 text-xs text-gray-500"
+                    x-text="l.date_from + ' → ' + l.date_to"></td>
+                <td class="px-4 py-2 text-right font-medium" x-text="l.days"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs px-2 py-0.5 rounded" :class="badge(l.status)"
+                        x-text="statusLabel(l.status)"></span>
+                </td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5" x-show="l.status === 'pending'">
+                    <button @click="approveLeave(l.id)"
+                            class="text-xs px-2 py-1 rounded bg-ok text-white">Aprobar</button>
+                    <button @click="rejectLeave(l.id)"
+                            class="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                      Rechazar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!filteredLeave.length">
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                Sin solicitudes en este filtro
+              </td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== EXPENSES ===== -->
+  <template x-if="tab === 'expenses'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nuevo reporte de gastos</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <select x-model="xForm.employee_id" class="border border-gray-300 rounded px-3 py-2">
+            <option value="">Empleado *</option>
+            <template x-for="e in employees" :key="e.id">
+              <option :value="e.id" x-text="e.first_name + ' ' + e.last_name"></option>
+            </template>
+          </select>
+          <input x-model="xForm.title" placeholder="Título (Viaje a cliente…)"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+
+        <label class="block text-sm font-medium mb-2">Conceptos</label>
+        <template x-for="(l, i) in xForm.lines" :key="i">
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <input x-model="l.expense_date" type="date"
+                   class="border border-gray-300 rounded px-2 py-1.5">
+            <select x-model="l.category" class="border border-gray-300 rounded px-2 py-1.5">
+              <option value="travel">Viaje</option>
+              <option value="meals">Comidas</option>
+              <option value="lodging">Hospedaje</option>
+              <option value="supplies">Materiales</option>
+              <option value="other">Otro</option>
+            </select>
+            <input x-model="l.description" placeholder="Descripción"
+                   class="border border-gray-300 rounded px-2 py-1.5">
+            <select x-model="l.cost_center_id" class="border border-gray-300 rounded px-2 py-1.5">
+              <option value="">Centro de costo</option>
+              <template x-for="c in costCenters" :key="c.id">
+                <option :value="c.id" x-text="c.name"></option>
+              </template>
+            </select>
+            <div class="flex gap-1">
+              <input x-model.number="l.amount" type="number" step="0.01" placeholder="Importe"
+                     class="flex-1 border border-gray-300 rounded px-2 py-1.5">
+              <button @click="xForm.lines.splice(i,1)" x-show="xForm.lines.length > 1"
+                      class="px-2 text-red-500 hover:text-red-700">×</button>
+            </div>
+          </div>
+        </template>
+
+        <div class="flex justify-between items-center mt-3">
+          <button @click="xForm.lines.push({expense_date:'', category:'travel', description:'', cost_center_id:'', amount:0})"
+                  class="text-sm text-brand hover:underline">+ Agregar concepto</button>
+          <span class="text-sm font-semibold">Total: <span x-text="money(expenseTotal)"></span></span>
+        </div>
+
+        <button @click="createExpense()" :disabled="busy || !xForm.employee_id || !expenseTotal"
+                class="mt-4 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Crear reporte
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Reportes de gastos — flujo borrador → enviado → aprobado → pagado
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Folio</th>
+              <th class="px-4 py-2">Empleado</th>
+              <th class="px-4 py-2">Título</th>
+              <th class="px-4 py-2 text-right">Total</th>
+              <th class="px-4 py-2">Estado</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="x in expenses" :key="x.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs" x-text="x.folio || ('#'+x.id)"></td>
+                <td class="px-4 py-2" x-text="x.employee_name || x.employee_id"></td>
+                <td class="px-4 py-2" x-text="x.title || '—'"></td>
+                <td class="px-4 py-2 text-right font-medium" x-text="money(x.total)"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs px-2 py-0.5 rounded" :class="badge(x.status)"
+                        x-text="statusLabel(x.status)"></span>
+                </td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5">
+                    <button x-show="x.status === 'draft'" @click="expenseAction(x.id, 'submit')"
+                            class="text-xs px-2 py-1 rounded bg-brand text-white">Enviar</button>
+                    <button x-show="x.status === 'submitted'" @click="expenseAction(x.id, 'approve')"
+                            class="text-xs px-2 py-1 rounded bg-warn text-white">Aprobar</button>
+                    <button x-show="x.status === 'approved'" @click="expenseAction(x.id, 'reimburse')"
+                            class="text-xs px-2 py-1 rounded bg-ok text-white">Reembolsar</button>
+                    <span x-show="x.status === 'paid'" class="text-xs text-ok">✓ pagado</span>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!expenses.length">
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Sin reportes</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== ORG ===== -->
+  <template x-if="tab === 'org'">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-4">Departamentos</h2>
+        <div class="flex gap-2 mb-4">
+          <input x-model="dForm.name" placeholder="Nombre *"
+                 class="flex-1 border border-gray-300 rounded px-3 py-2">
+          <input x-model="dForm.code" placeholder="Código" maxlength="6"
+                 class="w-24 border border-gray-300 rounded px-3 py-2 uppercase">
+          <button @click="createDept()" :disabled="busy || !dForm.name"
+                  class="bg-brand text-white px-4 py-2 rounded disabled:opacity-40">+</button>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-3 py-2">Nombre</th>
+              <th class="px-3 py-2">Código</th>
+              <th class="px-3 py-2 text-right">Plantilla</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="d in departments" :key="d.id">
+              <tr class="border-t border-gray-100">
+                <td class="px-3 py-2" x-text="d.name"></td>
+                <td class="px-3 py-2 font-mono text-xs" x-text="d.code || '—'"></td>
+                <td class="px-3 py-2 text-right font-medium" x-text="d.headcount ?? 0"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-4">Puestos</h2>
+        <div class="space-y-2 mb-4">
+          <input x-model="poForm.title" placeholder="Título *"
+                 class="w-full border border-gray-300 rounded px-3 py-2">
+          <div class="flex gap-2">
+            <select x-model="poForm.department_id" class="flex-1 border border-gray-300 rounded px-3 py-2">
+              <option value="">Departamento</option>
+              <template x-for="d in departments" :key="d.id">
+                <option :value="d.id" x-text="d.name"></option>
+              </template>
+            </select>
+            <input x-model.number="poForm.min_salary" type="number" placeholder="Mín"
+                   class="w-24 border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="poForm.max_salary" type="number" placeholder="Máx"
+                   class="w-24 border border-gray-300 rounded px-3 py-2">
+            <button @click="createPosition()" :disabled="busy || !poForm.title"
+                    class="bg-brand text-white px-4 py-2 rounded disabled:opacity-40">+</button>
+          </div>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-3 py-2">Puesto</th>
+              <th class="px-3 py-2">Departamento</th>
+              <th class="px-3 py-2 text-right">Rango</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="p in positions" :key="p.id">
+              <tr class="border-t border-gray-100">
+                <td class="px-3 py-2" x-text="p.title"></td>
+                <td class="px-3 py-2 text-gray-600" x-text="p.department_name || '—'"></td>
+                <td class="px-3 py-2 text-right text-xs"
+                    x-text="money(p.min_salary) + ' – ' + money(p.max_salary)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+</div>
+<script>
+function rrhh() {
+  return {
+    tab: 'employees',
+    tabs: [
+      { id: 'employees', label: 'Empleados' },
+      { id: 'leave', label: 'Ausencias' },
+      { id: 'expenses', label: 'Gastos' },
+      { id: 'org', label: 'Organización' },
+    ],
+    employees: [], departments: [], positions: [], leaveTypes: [],
+    leave: [], expenses: [], costCenters: [],
+    headcount: {}, balance: {},
+    empStatus: 'active', leaveFilter: 'todas',
+    contractFor: null,
+    eForm: { first_name: '', last_name: '', email: '', hire_date: '',
+             department_id: '', position_id: '', manager_id: '' },
+    cForm: { wage: null, wage_period: 'monthly', contract_type: 'permanent', date_start: '' },
+    lForm: { employee_id: '', leave_type_id: '', date_from: '', date_to: '', reason: '' },
+    xForm: { employee_id: '', title: '', lines: [
+      { expense_date: '', category: 'travel', description: '', cost_center_id: '', amount: 0 },
+    ] },
+    dForm: { name: '', code: '' },
+    poForm: { title: '', department_id: '', min_salary: null, max_salary: null },
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    statusLabels: {
+      todas: 'Todas', pending: 'Pendiente', approved: 'Aprobada',
+      rejected: 'Rechazada', draft: 'Borrador', submitted: 'Enviado',
+      paid: 'Pagado', active: 'Activo', terminated: 'Baja',
+    },
+    statusLabel(s) { return this.statusLabels[s] || s || '—' },
+
+    badge(s) {
+      return {
+        pending: 'bg-amber-50 text-warn',
+        submitted: 'bg-amber-50 text-warn',
+        approved: 'bg-blue-50 text-brand',
+        paid: 'bg-green-50 text-ok',
+        rejected: 'bg-red-50 text-red-700',
+        draft: 'bg-gray-100 text-gray-700',
+      }[s] || 'bg-gray-100 text-gray-600';
+    },
+
+    periodLabels: {
+      monthly: 'mes', annual: 'año', daily: 'día', hourly: 'hora',
+    },
+    periodLabel(p) { return this.periodLabels[p] || p || '' },
+
+    money(v) {
+      return Number(v || 0).toLocaleString('es-MX',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    get maxDept() {
+      const list = this.headcount.by_department || [];
+      return list.length ? Math.max(...list.map(d => Number(d.headcount || 0))) : 0;
+    },
+
+    get filteredLeave() {
+      if (this.leaveFilter === 'todas') return this.leave;
+      return this.leave.filter(l => l.status === this.leaveFilter);
+    },
+
+    get canRequestLeave() {
+      const f = this.lForm;
+      return f.employee_id && f.leave_type_id && f.date_from && f.date_to;
+    },
+
+    get expenseTotal() {
+      return this.xForm.lines.reduce((s, l) => s + Number(l.amount || 0), 0);
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadEmployees(), this.loadOrg(), this.loadLeave(),
+        this.loadExpenses(), this.loadHeadcount(), this.loadRefs(),
+      ]);
+    },
+
+    async loadEmployees() {
+      try {
+        const e = await this.api('GET', `/api/hr/employees?status=${this.empStatus}`);
+        this.employees = Array.isArray(e) ? e : (e.employees || []);
+      } catch (e) { this.notify('Error al cargar empleados: ' + e.message, 'error') }
+    },
+
+    async loadOrg() {
+      try {
+        const d = await this.api('GET', '/api/hr/departments');
+        this.departments = Array.isArray(d) ? d : (d.departments || []);
+      } catch (e) {}
+      try {
+        const p = await this.api('GET', '/api/hr/positions');
+        this.positions = Array.isArray(p) ? p : (p.positions || []);
+      } catch (e) {}
+    },
+
+    async loadLeave() {
+      try {
+        const l = await this.api('GET', '/api/hr/leave');
+        this.leave = Array.isArray(l) ? l : (l.requests || []);
+      } catch (e) {}
+      try {
+        const t = await this.api('GET', '/api/hr/leave-types');
+        this.leaveTypes = Array.isArray(t) ? t : (t.leave_types || []);
+      } catch (e) {}
+    },
+
+    async loadExpenses() {
+      try {
+        const x = await this.api('GET', '/api/hr/expenses');
+        this.expenses = Array.isArray(x) ? x : (x.reports || []);
+      } catch (e) {}
+    },
+
+    async loadHeadcount() {
+      try { this.headcount = await this.api('GET', '/api/hr/headcount') || {} } catch (e) {}
+    },
+
+    async loadRefs() {
+      try {
+        const c = await this.api('GET', '/api/cost-centers');
+        this.costCenters = Array.isArray(c) ? c : (c.cost_centers || []);
+      } catch (e) {}
+    },
+
+    async createEmployee() {
+      this.busy = true;
+      try {
+        const body = { first_name: this.eForm.first_name, last_name: this.eForm.last_name };
+        for (const k of ['email', 'hire_date']) {
+          if (this.eForm[k]) body[k] = this.eForm[k];
+        }
+        for (const k of ['department_id', 'position_id', 'manager_id']) {
+          if (this.eForm[k]) body[k] = Number(this.eForm[k]);
+        }
+        const r = await this.api('POST', '/api/hr/employees', body);
+        this.notify(`Empleado registrado: ${r.name}`);
+        this.eForm = { first_name: '', last_name: '', email: '', hire_date: '',
+                       department_id: '', position_id: '', manager_id: '' };
+        await Promise.all([this.loadEmployees(), this.loadHeadcount(), this.loadOrg()]);
+      } catch (e) {
+        this.notify('Error al registrar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    openContract(emp) {
+      this.contractFor = emp;
+      this.cForm = { wage: null, wage_period: 'monthly',
+                     contract_type: 'permanent', date_start: '' };
+    },
+
+    async createContract() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/hr/contracts', {
+          employee_id: this.contractFor.id,
+          wage: Number(this.cForm.wage),
+          wage_period: this.cForm.wage_period,
+          contract_type: this.cForm.contract_type,
+          date_start: this.cForm.date_start || undefined,
+        });
+        this.notify(`Contrato creado · ${this.money(r.wage)}/${this.periodLabel(r.wage_period)}` +
+          ` (equivale a ${this.money(r.monthly_equivalent)}/mes)`);
+        this.contractFor = null;
+        await Promise.all([this.loadEmployees(), this.loadHeadcount()]);
+      } catch (e) {
+        this.notify('Error al crear el contrato: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async terminate(emp) {
+      if (!confirm(`¿Dar de baja a ${emp.first_name} ${emp.last_name}? Se cerrará su contrato activo.`)) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/hr/employees/terminate',
+                                 { employee_id: emp.id });
+        this.notify(`${r.name} dado de baja el ${r.termination_date}`);
+        await Promise.all([this.loadEmployees(), this.loadHeadcount()]);
+      } catch (e) {
+        this.notify('Error al dar de baja: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async loadBalance(emp) {
+      this.busy = true;
+      try {
+        this.balance = await this.api('GET', `/api/hr/leave/balance?employee_id=${emp.id}`);
+      } catch (e) {
+        this.notify('Error al cargar saldos: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async requestLeave() {
+      if (!this.canRequestLeave) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/hr/leave', {
+          employee_id: Number(this.lForm.employee_id),
+          leave_type_id: Number(this.lForm.leave_type_id),
+          date_from: this.lForm.date_from,
+          date_to: this.lForm.date_to,
+          reason: this.lForm.reason || undefined,
+        });
+        this.notify(`Solicitud creada: ${r.days} días hábiles de ${r.leave_type}` +
+          ` · ${this.statusLabel(r.status)}`);
+        this.lForm = { employee_id: '', leave_type_id: '', date_from: '', date_to: '', reason: '' };
+        await this.loadLeave();
+      } catch (e) {
+        this.notify('No se pudo solicitar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async approveLeave(id) {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/hr/leave/approve', { request_id: id });
+        this.notify(`Ausencia aprobada · ${r.days} días`);
+        await this.loadLeave();
+      } catch (e) {
+        this.notify('Error al aprobar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async rejectLeave(id) {
+      this.busy = true;
+      try {
+        await this.api('POST', '/api/hr/leave/reject', { request_id: id });
+        this.notify('Ausencia rechazada');
+        await this.loadLeave();
+      } catch (e) {
+        this.notify('Error al rechazar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createExpense() {
+      this.busy = true;
+      try {
+        const lines = this.xForm.lines
+          .filter(l => Number(l.amount) > 0)
+          .map(l => ({
+            expense_date: l.expense_date || undefined,
+            category: l.category,
+            description: l.description || undefined,
+            amount: Number(l.amount),
+            cost_center_id: l.cost_center_id ? Number(l.cost_center_id) : undefined,
+          }));
+        const r = await this.api('POST', '/api/hr/expenses', {
+          employee_id: Number(this.xForm.employee_id),
+          title: this.xForm.title || undefined,
+          lines,
+        });
+        this.notify(`Reporte ${r.folio || '#' + r.id} creado · ${this.money(r.total)}`);
+        this.xForm = { employee_id: '', title: '', lines: [
+          { expense_date: '', category: 'travel', description: '', cost_center_id: '', amount: 0 },
+        ] };
+        await this.loadExpenses();
+      } catch (e) {
+        this.notify('Error al crear el reporte: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async expenseAction(id, action) {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', `/api/hr/expenses/${action}`, { report_id: id });
+        const labels = { submit: 'enviado', approve: 'aprobado', reimburse: 'reembolsado' };
+        this.notify(`Reporte #${id} ${labels[action] || action}` +
+          (r.payment_folio ? ` · pago ${r.payment_folio}` : ''));
+        await this.loadExpenses();
+      } catch (e) {
+        this.notify(`No se pudo ${action}: ` + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createDept() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/hr/departments', {
+          name: this.dForm.name,
+          code: (this.dForm.code || '').toUpperCase() || undefined,
+        });
+        this.notify(`Departamento creado: ${r.name}`);
+        this.dForm = { name: '', code: '' };
+        await this.loadOrg();
+      } catch (e) {
+        this.notify('Error al crear el departamento: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createPosition() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/hr/positions', {
+          title: this.poForm.title,
+          department_id: this.poForm.department_id ? Number(this.poForm.department_id) : undefined,
+          min_salary: Number(this.poForm.min_salary || 0),
+          max_salary: Number(this.poForm.max_salary || 0),
+        });
+        this.notify(`Puesto creado: ${r.title}`);
+        this.poForm = { title: '', department_id: '', min_salary: null, max_salary: null };
+        await this.loadOrg();
+      } catch (e) {
+        this.notify('Error al crear el puesto: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>
