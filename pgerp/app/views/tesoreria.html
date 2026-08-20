@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tesorería — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/contabilidad" class="hover:text-warn">Contabilidad</a>
+    <a href="/tesoreria" class="text-warn font-medium">Tesorería</a>
+  </div>
+  <a href="/setup" class="text-sm opacity-75 hover:opacity-100">Configuración</a>
+</nav>
+
+<div x-data="tesoreria()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+  <h1 class="text-2xl font-bold mb-6">Tesorería y activos</h1>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Por cobrar</div>
+      <div class="text-2xl font-bold text-warn" x-text="money(ar.total_receivable)"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Por pagar</div>
+      <div class="text-2xl font-bold text-red-600" x-text="money(ap.total_payable)"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Pagos registrados</div>
+      <div class="text-2xl font-bold" x-text="payments.length"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Valor en libros activos</div>
+      <div class="text-2xl font-bold text-ok" x-text="money(assetSummary.total_book_value)"></div>
+    </div>
+  </div>
+
+  <div class="flex gap-1 mb-6 border-b border-gray-200 flex-wrap">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+              class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+              :class="tab === t.id ? 'border-brand text-brand'
+                                   : 'border-transparent text-gray-500 hover:text-gray-800'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <!-- ===== PAYMENTS ===== -->
+  <template x-if="tab === 'payments'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Registrar pago</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">Tipo *</label>
+            <select x-model="pForm.payment_type" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="inbound">Cobro (entra)</option>
+              <option value="outbound">Pago (sale)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Importe *</label>
+            <input x-model.number="pForm.amount" type="number" min="0.01" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Fecha</label>
+            <input x-model="pForm.payment_date" type="date"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Método</label>
+            <select x-model="pForm.method" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="transfer">Transferencia</option>
+              <option value="cash">Efectivo</option>
+              <option value="card">Tarjeta</option>
+              <option value="check">Cheque</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">Cuenta bancaria</label>
+            <select x-model="pForm.bank_account_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Sin especificar</option>
+              <template x-for="b in bankAccounts" :key="b.id">
+                <option :value="b.id" x-text="b.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Aplicar a factura</label>
+            <select x-model="pForm.invoice_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Sin aplicar</option>
+              <template x-for="f in openInvoices" :key="f.id">
+                <option :value="f.id"
+                        x-text="(f.folio || '#'+f.id) + ' · saldo ' + money((f.total||0)-(f.amount_paid||0))"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Referencia</label>
+            <input x-model="pForm.reference" placeholder="Folio, concepto…"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+        </div>
+
+        <button @click="registerPayment()" :disabled="busy || !pForm.amount"
+                class="bg-brand text-white px-5 py-2 rounded font-medium disabled:opacity-40">
+          <span x-text="busy ? 'Registrando…' : 'Registrar pago'"></span>
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">Pagos</div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Folio</th>
+              <th class="px-4 py-2">Fecha</th>
+              <th class="px-4 py-2">Tipo</th>
+              <th class="px-4 py-2 text-right">Importe</th>
+              <th class="px-4 py-2 text-right">Aplicado</th>
+              <th class="px-4 py-2">Referencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="p in payments" :key="p.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs" x-text="p.folio || ('#'+p.id)"></td>
+                <td class="px-4 py-2 text-xs text-gray-500" x-text="(p.payment_date || '').slice(0,10)"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs px-2 py-0.5 rounded"
+                        :class="p.payment_type === 'inbound' ? 'bg-green-50 text-ok' : 'bg-red-50 text-red-700'"
+                        x-text="p.payment_type === 'inbound' ? 'Cobro' : 'Pago'"></span>
+                </td>
+                <td class="px-4 py-2 text-right font-medium" x-text="money(p.amount)"></td>
+                <td class="px-4 py-2 text-right text-gray-600" x-text="money(p.allocated)"></td>
+                <td class="px-4 py-2 text-xs text-gray-500" x-text="p.reference || '—'"></td>
+              </tr>
+            </template>
+            <template x-if="!payments.length">
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Sin pagos</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== AGING ===== -->
+  <template x-if="tab === 'aging'">
+    <div class="space-y-6">
+      <template x-for="rep in [{d:ar, t:'Cuentas por cobrar', k:'invoices', tot:'total_receivable'},
+                               {d:ap, t:'Cuentas por pagar', k:'orders', tot:'total_payable'}]"
+                :key="rep.t">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="font-semibold" x-text="rep.t"></h2>
+            <span class="text-lg font-bold" x-text="money(rep.d[rep.tot])"></span>
+          </div>
+
+          <div class="grid grid-cols-5 gap-2 mb-4">
+            <template x-for="b in ['current','1_30','31_60','61_90','over_90']" :key="b">
+              <div class="border rounded p-2 text-center"
+                   :class="bucketClass(b, (rep.d.buckets || {})[b])">
+                <div class="text-[10px] uppercase text-gray-500" x-text="bucketLabel(b)"></div>
+                <div class="text-sm font-bold" x-text="money((rep.d.buckets || {})[b])"></div>
+              </div>
+            </template>
+          </div>
+
+          <table class="w-full text-sm border border-gray-200 rounded">
+            <thead class="bg-gray-50 text-left text-gray-600">
+              <tr>
+                <th class="px-3 py-2">Documento</th>
+                <th class="px-3 py-2">Contraparte</th>
+                <th class="px-3 py-2 text-right">Total</th>
+                <th class="px-3 py-2 text-right">Pagado</th>
+                <th class="px-3 py-2 text-right">Saldo</th>
+                <th class="px-3 py-2 text-right">Días</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in (rep.d[rep.k] || [])" :key="r.invoice_id || r.purchase_order_id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-3 py-2 font-mono text-xs"
+                      x-text="r.folio || ('#' + (r.invoice_id || r.purchase_order_id))"></td>
+                  <td class="px-3 py-2" x-text="r.customer || r.supplier || '—'"></td>
+                  <td class="px-3 py-2 text-right" x-text="money(r.total)"></td>
+                  <td class="px-3 py-2 text-right text-gray-500" x-text="money(r.paid)"></td>
+                  <td class="px-3 py-2 text-right font-medium" x-text="money(r.balance)"></td>
+                  <td class="px-3 py-2 text-right"
+                      :class="r.days_overdue > 0 ? 'text-red-600 font-medium' : 'text-gray-500'"
+                      x-text="r.days_overdue"></td>
+                </tr>
+              </template>
+              <template x-if="!(rep.d[rep.k] || []).length">
+                <tr><td colspan="6" class="px-3 py-6 text-center text-gray-400">Sin saldos pendientes</td></tr>
+              </template>
+            </tbody>
+          </table>
+        </section>
+      </template>
+    </div>
+  </template>
+  <!-- ===== BANKS ===== -->
+  <template x-if="tab === 'banks'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nueva cuenta bancaria</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input x-model="bkForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="bkForm.bank_name" placeholder="Banco"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="bkForm.currency" placeholder="Moneda" maxlength="3"
+                 class="border border-gray-300 rounded px-3 py-2 uppercase">
+          <input x-model.number="bkForm.opening_balance" type="number" step="0.01"
+                 placeholder="Saldo inicial"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+        <button @click="createBank()" :disabled="busy || !bkForm.name"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Crear cuenta
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">Cuentas bancarias</div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Nombre</th>
+              <th class="px-4 py-2">Banco</th>
+              <th class="px-4 py-2">Moneda</th>
+              <th class="px-4 py-2 text-right">Saldo actual</th>
+              <th class="px-4 py-2">Conciliación</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="b in bankAccounts" :key="b.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium" x-text="b.name"></td>
+                <td class="px-4 py-2" x-text="b.bank_name || '—'"></td>
+                <td class="px-4 py-2" x-text="b.currency"></td>
+                <td class="px-4 py-2 text-right font-medium" x-text="money(b.current_balance)"></td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5">
+                    <button @click="selectBank(b.id)"
+                            class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                      Ver estado
+                    </button>
+                    <button @click="autoReconcile(b.id)"
+                            class="text-xs px-2 py-1 rounded bg-ok text-white hover:opacity-90">
+                      Conciliar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!bankAccounts.length">
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Sin cuentas bancarias</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Import statement -->
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-1">Importar movimientos bancarios</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          Un movimiento por línea: <code class="text-xs bg-gray-100 px-1">fecha, descripción, importe</code>
+          — importes negativos para cargos.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <select x-model="impForm.bank_account_id" class="border border-gray-300 rounded px-3 py-2">
+            <option value="">Cuenta bancaria…</option>
+            <template x-for="b in bankAccounts" :key="b.id">
+              <option :value="b.id" x-text="b.name"></option>
+            </template>
+          </select>
+          <input x-model="impForm.reference" placeholder="Referencia del extracto"
+                 class="border border-gray-300 rounded px-3 py-2 md:col-span-2">
+        </div>
+        <textarea x-model="impForm.raw" rows="4"
+                  placeholder="2026-08-10, Pago cliente, 5000&#10;2026-08-12, Depósito, 777&#10;2026-08-15, Comisión, -25"
+                  class="w-full border border-gray-300 rounded px-3 py-2 font-mono text-sm"></textarea>
+        <button @click="importStatement()" :disabled="busy || !impForm.bank_account_id || !impForm.raw"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Importar <span x-show="parsedLines.length" x-text="'(' + parsedLines.length + ' líneas)'"></span>
+        </button>
+      </section>
+
+      <!-- Reconciliation status -->
+      <template x-if="recStatus.bank_account">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h2 class="font-semibold" x-text="recStatus.bank_account"></h2>
+              <p class="text-sm text-gray-500">
+                Saldo del extracto <span class="font-medium" x-text="money(recStatus.statement_balance)"></span>
+                · <span x-text="recStatus.currency"></span>
+              </p>
+            </div>
+            <button @click="recStatus = {}" class="text-gray-400 hover:text-gray-700">×</button>
+          </div>
+
+          <div class="mb-4">
+            <div class="flex justify-between text-sm mb-1">
+              <span>Conciliado</span>
+              <span class="font-medium">
+                <span x-text="recStatus.lines_matched"></span> / <span x-text="recStatus.lines_total"></span>
+                (<span x-text="recStatus.reconciled_pct"></span>%)
+              </span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+              <div class="h-2.5 rounded-full bg-ok"
+                   :style="`width: ${recStatus.reconciled_pct || 0}%`"></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+            <div class="border border-green-200 bg-green-50 rounded p-3">
+              <div class="text-xs uppercase text-gray-500">Importe conciliado</div>
+              <div class="font-bold text-ok" x-text="money(recStatus.amount_matched)"></div>
+            </div>
+            <div class="border border-amber-200 bg-amber-50 rounded p-3">
+              <div class="text-xs uppercase text-gray-500">Sin conciliar</div>
+              <div class="font-bold text-warn" x-text="money(recStatus.amount_unmatched)"></div>
+            </div>
+          </div>
+
+          <template x-if="(recStatus.unmatched_lines || []).length">
+            <div>
+              <h3 class="text-sm font-semibold mb-2">Movimientos sin conciliar</h3>
+              <table class="w-full text-sm border border-gray-200 rounded">
+                <thead class="bg-gray-50 text-left text-gray-600">
+                  <tr>
+                    <th class="px-3 py-2">Fecha</th>
+                    <th class="px-3 py-2">Descripción</th>
+                    <th class="px-3 py-2 text-right">Importe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="l in recStatus.unmatched_lines" :key="l.id">
+                    <tr class="border-t border-gray-100">
+                      <td class="px-3 py-2 text-xs text-gray-500" x-text="l.line_date"></td>
+                      <td class="px-3 py-2" x-text="l.description || '—'"></td>
+                      <td class="px-3 py-2 text-right font-medium"
+                          :class="Number(l.amount) < 0 ? 'text-red-600' : ''"
+                          x-text="money(l.amount)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </section>
+      </template>
+    </div>
+  </template>
+
+  <!-- ===== ASSETS ===== -->
+  <template x-if="tab === 'assets'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nuevo activo fijo</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <input x-model="asForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="asForm.code" placeholder="Código"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="asForm.category" placeholder="Categoría (Vehículos…)"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Costo de adquisición *</label>
+            <input x-model.number="asForm.acquisition_cost" type="number" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Valor residual</label>
+            <input x-model.number="asForm.salvage_value" type="number" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Vida útil (meses)</label>
+            <input x-model.number="asForm.useful_life_months" type="number" min="1"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Fecha de adquisición</label>
+            <input x-model="asForm.acquisition_date" type="date"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Método de depreciación</label>
+            <select x-model="asForm.method" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="straight_line">Línea recta</option>
+              <option value="declining_balance">Saldo decreciente doble</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Centro de costo</label>
+            <select x-model="asForm.cost_center_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Sin asignar</option>
+              <template x-for="c in costCenters" :key="c.id">
+                <option :value="c.id" x-text="c.name"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+        <button @click="createAsset()" :disabled="busy || !asForm.name || !asForm.acquisition_cost"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Registrar activo
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="font-semibold">Activos fijos</h2>
+          <span class="text-sm text-gray-500">
+            Costo <span class="font-medium" x-text="money(assetSummary.total_acquisition_cost)"></span>
+            · Depreciación <span class="font-medium" x-text="money(assetSummary.total_accumulated_depreciation)"></span>
+          </span>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Activo</th>
+              <th class="px-4 py-2">Categoría</th>
+              <th class="px-4 py-2 text-right">Costo</th>
+              <th class="px-4 py-2 text-right">Depreciado</th>
+              <th class="px-4 py-2 text-right">Valor libros</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="a in assets" :key="a.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2">
+                  <span class="font-medium" x-text="a.name"></span>
+                  <span class="text-xs text-gray-400" x-text="a.code ? ' · ' + a.code : ''"></span>
+                </td>
+                <td class="px-4 py-2" x-text="a.category || '—'"></td>
+                <td class="px-4 py-2 text-right" x-text="money(a.acquisition_cost)"></td>
+                <td class="px-4 py-2 text-right text-gray-600"
+                    x-text="money(a.accumulated_depreciation)"></td>
+                <td class="px-4 py-2 text-right font-medium" x-text="money(a.book_value)"></td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5">
+                    <button @click="loadSchedule(a.id)"
+                            class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                      Tabla
+                    </button>
+                    <button @click="openDepreciate(a)"
+                            class="text-xs px-2 py-1 rounded bg-brand text-white">
+                      Depreciar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!assets.length">
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Sin activos</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Depreciate -->
+      <template x-if="depFor">
+        <section class="bg-white rounded-lg border-2 border-brand p-6 mb-6">
+          <h2 class="font-semibold mb-1">Registrar depreciación</h2>
+          <p class="text-sm text-gray-500 mb-4" x-text="depFor.name"></p>
+          <div class="flex gap-3 items-end">
+            <div>
+              <label class="block text-sm font-medium mb-1">Periodo (YYYY-MM) *</label>
+              <input x-model="depPeriod" placeholder="2026-08"
+                     class="border border-gray-300 rounded px-3 py-2">
+            </div>
+            <button @click="depreciate()" :disabled="busy || !depPeriod"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Registrar
+            </button>
+            <button @click="depFor = null"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+          </div>
+        </section>
+      </template>
+
+      <!-- Schedule -->
+      <template x-if="schedule.schedule">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h2 class="font-semibold" x-text="schedule.asset"></h2>
+              <p class="text-sm text-gray-500">
+                <span x-text="schedule.periods"></span> periodos ·
+                método <span x-text="schedule.method === 'straight_line' ? 'línea recta' : 'saldo decreciente'"></span>
+              </p>
+            </div>
+            <button @click="schedule = {}" class="text-gray-400 hover:text-gray-700">×</button>
+          </div>
+          <div class="max-h-80 overflow-y-auto">
+            <table class="w-full text-sm border border-gray-200 rounded">
+              <thead class="bg-gray-50 text-left text-gray-600 sticky top-0">
+                <tr>
+                  <th class="px-3 py-2">Periodo</th>
+                  <th class="px-3 py-2 text-right">Depreciación</th>
+                  <th class="px-3 py-2 text-right">Acumulada</th>
+                  <th class="px-3 py-2 text-right">Valor libros</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="s in schedule.schedule" :key="s.period">
+                  <tr class="border-t border-gray-100">
+                    <td class="px-3 py-2 font-mono text-xs" x-text="s.period"></td>
+                    <td class="px-3 py-2 text-right" x-text="money(s.amount)"></td>
+                    <td class="px-3 py-2 text-right text-gray-600" x-text="money(s.accumulated)"></td>
+                    <td class="px-3 py-2 text-right font-medium" x-text="money(s.book_value)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </template>
+    </div>
+  </template>
+</div>
+<script>
+function tesoreria() {
+  return {
+    tab: 'payments',
+    tabs: [
+      { id: 'payments', label: 'Pagos' },
+      { id: 'aging', label: 'CxC / CxP' },
+      { id: 'banks', label: 'Bancos y conciliación' },
+      { id: 'assets', label: 'Activos fijos' },
+    ],
+    payments: [], bankAccounts: [], assets: [], costCenters: [], facturas: [],
+    ar: {}, ap: {}, assetSummary: {}, recStatus: {}, schedule: {},
+    pForm: { payment_type: 'inbound', amount: null, payment_date: '',
+             method: 'transfer', bank_account_id: '', invoice_id: '', reference: '' },
+    bkForm: { name: '', bank_name: '', currency: 'USD', opening_balance: 0 },
+    impForm: { bank_account_id: '', reference: '', raw: '' },
+    asForm: { name: '', code: '', category: '', acquisition_cost: null,
+              salvage_value: 0, useful_life_months: 60, acquisition_date: '',
+              method: 'straight_line', cost_center_id: '' },
+    depFor: null, depPeriod: '',
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    bucketLabels: {
+      current: 'Al día', '1_30': '1-30 d', '31_60': '31-60 d',
+      '61_90': '61-90 d', over_90: '+90 d',
+    },
+    bucketLabel(b) { return this.bucketLabels[b] || b },
+    bucketClass(b, value) {
+      if (!Number(value)) return 'border-gray-200 bg-gray-50';
+      if (b === 'current') return 'border-green-200 bg-green-50';
+      if (b === 'over_90') return 'border-red-200 bg-red-50';
+      return 'border-amber-200 bg-amber-50';
+    },
+
+    money(v) {
+      return Number(v || 0).toLocaleString('es-MX',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    get openInvoices() {
+      return this.facturas.filter(f =>
+        (Number(f.total || 0) - Number(f.amount_paid || 0)) > 0.01);
+    },
+
+    // Parse the pasted statement into API lines: date, description, amount
+    get parsedLines() {
+      return (this.impForm.raw || '')
+        .split('\n')
+        .map(row => row.trim())
+        .filter(Boolean)
+        .map(row => {
+          const parts = row.split(',').map(p => p.trim());
+          if (parts.length < 2) return null;
+          const amount = Number(parts[parts.length - 1]);
+          if (Number.isNaN(amount)) return null;
+          return {
+            line_date: parts[0],
+            description: parts.slice(1, -1).join(', ') || 'Movimiento',
+            amount,
+          };
+        })
+        .filter(Boolean);
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadPayments(), this.loadAging(), this.loadBanks(),
+        this.loadAssets(), this.loadRefs(),
+      ]);
+    },
+
+    async loadPayments() {
+      try {
+        const p = await this.api('GET', '/api/payments');
+        this.payments = Array.isArray(p) ? p : (p.payments || []);
+      } catch (e) { this.notify('Error al cargar pagos: ' + e.message, 'error') }
+    },
+
+    async loadAging() {
+      try { this.ar = await this.api('GET', '/api/ar/aging') || {} } catch (e) {}
+      try { this.ap = await this.api('GET', '/api/ap/aging') || {} } catch (e) {}
+    },
+
+    async loadBanks() {
+      try {
+        const b = await this.api('GET', '/api/bank/accounts');
+        this.bankAccounts = Array.isArray(b) ? b : (b.accounts || []);
+      } catch (e) {}
+    },
+
+    async loadAssets() {
+      try {
+        const a = await this.api('GET', '/api/assets');
+        this.assets = Array.isArray(a) ? a : (a.assets || []);
+      } catch (e) {}
+      try { this.assetSummary = await this.api('GET', '/api/assets/summary') || {} } catch (e) {}
+    },
+
+    async loadRefs() {
+      try {
+        const c = await this.api('GET', '/api/cost-centers');
+        this.costCenters = Array.isArray(c) ? c : (c.cost_centers || []);
+      } catch (e) {}
+      try { this.facturas = await this.api('GET', '/api/facturas') || [] } catch (e) {}
+    },
+
+    async registerPayment() {
+      if (!this.pForm.amount) return;
+      this.busy = true;
+      try {
+        const body = {
+          amount: Number(this.pForm.amount),
+          payment_type: this.pForm.payment_type,
+          payment_date: this.pForm.payment_date || undefined,
+          method: this.pForm.method,
+          partner_type: this.pForm.payment_type === 'inbound' ? 'customer' : 'supplier',
+          bank_account_id: this.pForm.bank_account_id ? Number(this.pForm.bank_account_id) : undefined,
+          reference: this.pForm.reference || undefined,
+        };
+        if (this.pForm.invoice_id) {
+          const inv = this.facturas.find(f => String(f.id) === String(this.pForm.invoice_id));
+          const balance = inv ? Number(inv.total || 0) - Number(inv.amount_paid || 0) : 0;
+          const applied = Math.min(Number(this.pForm.amount), balance || Number(this.pForm.amount));
+          body.allocations = [{ document_type: 'invoice',
+                                document_id: Number(this.pForm.invoice_id),
+                                amount: applied }];
+          if (inv) body.partner_id = inv.cliente_id;
+        }
+        const r = await this.api('POST', '/api/payments', body);
+        this.notify(`Pago ${r.folio || ''} registrado · ${this.money(r.amount)}` +
+          (r.allocated ? ` · aplicado ${this.money(r.allocated)}` : ''));
+        this.pForm = { payment_type: 'inbound', amount: null, payment_date: '',
+                       method: 'transfer', bank_account_id: '', invoice_id: '', reference: '' };
+        await Promise.all([this.loadPayments(), this.loadAging(), this.loadRefs(), this.loadBanks()]);
+      } catch (e) {
+        this.notify('Error al registrar el pago: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createBank() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/bank/accounts', {
+          name: this.bkForm.name,
+          bank_name: this.bkForm.bank_name || undefined,
+          currency: (this.bkForm.currency || 'USD').toUpperCase(),
+          opening_balance: Number(this.bkForm.opening_balance || 0),
+        });
+        this.notify(`Cuenta bancaria creada: ${r.name || this.bkForm.name}`);
+        this.bkForm = { name: '', bank_name: '', currency: 'USD', opening_balance: 0 };
+        await this.loadBanks();
+      } catch (e) {
+        this.notify('Error al crear la cuenta: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async importStatement() {
+      const lines = this.parsedLines;
+      if (!lines.length) {
+        this.notify('No se pudo interpretar ninguna línea. Usa: fecha, descripción, importe', 'error');
+        return;
+      }
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/bank/statements/import', {
+          bank_account_id: Number(this.impForm.bank_account_id),
+          reference: this.impForm.reference || undefined,
+          lines,
+        });
+        this.notify(`Importados ${r.imported} movimientos`);
+        this.impForm.raw = '';
+        await this.loadBanks();
+        await this.selectBank(Number(this.impForm.bank_account_id));
+      } catch (e) {
+        this.notify('Error al importar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async autoReconcile(bankId) {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/bank/reconcile/auto',
+                                 { bank_account_id: Number(bankId) });
+        this.notify(`Conciliados ${r.matched_count} movimientos` +
+          (r.still_unmatched ? ` · ${r.still_unmatched} sin conciliar` : ''));
+        await this.selectBank(bankId);
+      } catch (e) {
+        this.notify('Error al conciliar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async selectBank(bankId) {
+      try {
+        this.recStatus = await this.api('GET',
+          `/api/bank/reconcile/status?bank_account_id=${bankId}`);
+      } catch (e) {
+        this.notify('Error al leer el estado: ' + e.message, 'error');
+      }
+    },
+
+    async createAsset() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/assets', {
+          name: this.asForm.name,
+          code: this.asForm.code || undefined,
+          category: this.asForm.category || undefined,
+          acquisition_cost: Number(this.asForm.acquisition_cost),
+          salvage_value: Number(this.asForm.salvage_value || 0),
+          useful_life_months: Number(this.asForm.useful_life_months || 60),
+          acquisition_date: this.asForm.acquisition_date || undefined,
+          method: this.asForm.method,
+          cost_center_id: this.asForm.cost_center_id ? Number(this.asForm.cost_center_id) : undefined,
+        });
+        this.notify(`Activo registrado: ${r.name} · depreciación mensual ${this.money(r.monthly_depreciation)}`);
+        this.asForm = { name: '', code: '', category: '', acquisition_cost: null,
+                        salvage_value: 0, useful_life_months: 60, acquisition_date: '',
+                        method: 'straight_line', cost_center_id: '' };
+        await this.loadAssets();
+      } catch (e) {
+        this.notify('Error al registrar el activo: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    openDepreciate(asset) {
+      this.depFor = asset;
+      const now = new Date();
+      this.depPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    },
+
+    async depreciate() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/assets/depreciate', {
+          asset_id: this.depFor.id, period: this.depPeriod,
+        });
+        this.notify(`Depreciación ${r.period}: ${this.money(r.amount)}` +
+          ` · valor en libros ${this.money(r.book_value)}`);
+        this.depFor = null;
+        await this.loadAssets();
+      } catch (e) {
+        this.notify('Error al depreciar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async loadSchedule(assetId) {
+      this.busy = true;
+      try {
+        this.schedule = await this.api('GET', `/api/assets/schedule?asset_id=${assetId}`);
+      } catch (e) {
+        this.notify('Error al cargar la tabla: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>

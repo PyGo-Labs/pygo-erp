@@ -51,7 +51,7 @@ func registerRoutes(app *web.App) {
 
 	// Each view captures its own path in a closure. Relying on ctx["_path"]
 	// panicked when the framework didn't inject it (nil type assertion).
-	for _, view := range []string{"/productos", "/clientes", "/facturas", "/login", "/companies", "/users", "/inventory", "/setup", "/ventas", "/compras", "/inventario"} {
+	for _, view := range []string{"/productos", "/clientes", "/facturas", "/login", "/companies", "/users", "/inventory", "/setup", "/ventas", "/compras", "/inventario", "/contabilidad", "/tesoreria"} {
 		viewPath := view
 		r.Handle("GET", view, func(ctx map[string]interface{}) (interface{}, error) {
 			return loadTemplate("app/views" + viewPath + ".html"), nil
@@ -695,7 +695,40 @@ func registerRoutes(app *web.App) {
 		return app.Call("core.purchase.returns.create", ctx)
 	}, false)
 
-	// --- B3: Cost centers & budgets ---
+	// --- Accounting core (chart of accounts, journal, statements) ---
+	r.Handle("GET", "/api/accounts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.accounts.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/accounts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.accounts.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/accounts/detail", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.accounts.detail", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/journal", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.journal.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/journal", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.journal.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/accounting/trial-balance", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.trial_balance", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/accounting/income-statement", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.income_statement", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/accounting/balance-sheet", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.accounting.balance_sheet", ctx)
+	}, false)
+
+	// --- Accounting full (B3) ---
 	r.Handle("GET", "/api/cost-centers", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.cost_centers.list", ctx)
 	}, false)

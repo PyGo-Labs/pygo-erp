@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contabilidad — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/contabilidad" class="text-warn font-medium">Contabilidad</a>
+    <a href="/tesoreria" class="hover:text-warn">Tesorería</a>
+  </div>
+  <a href="/setup" class="text-sm opacity-75 hover:opacity-100">Configuración</a>
+</nav>
+
+<div x-data="conta()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+  <h1 class="text-2xl font-bold mb-6">Contabilidad</h1>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <div class="flex gap-1 mb-6 border-b border-gray-200 flex-wrap">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+              class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+              :class="tab === t.id ? 'border-brand text-brand'
+                                   : 'border-transparent text-gray-500 hover:text-gray-800'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <!-- ===== CHART OF ACCOUNTS ===== -->
+  <template x-if="tab === 'accounts'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nueva cuenta</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input x-model="aForm.code" placeholder="Código *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="aForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2 md:col-span-2">
+          <select x-model="aForm.type" class="border border-gray-300 rounded px-3 py-2">
+            <option value="asset">Activo</option>
+            <option value="liability">Pasivo</option>
+            <option value="equity">Capital</option>
+            <option value="revenue">Ingreso</option>
+            <option value="expense">Gasto</option>
+          </select>
+        </div>
+        <button @click="createAccount()" :disabled="busy || !aForm.code || !aForm.name"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Crear cuenta
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="font-semibold">Plan de cuentas (<span x-text="accounts.length"></span>)</h2>
+          <select x-model="accFilter" class="text-sm border border-gray-300 rounded px-2 py-1">
+            <option value="">Todos los tipos</option>
+            <option value="asset">Activo</option>
+            <option value="liability">Pasivo</option>
+            <option value="equity">Capital</option>
+            <option value="revenue">Ingreso</option>
+            <option value="expense">Gasto</option>
+          </select>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Código</th>
+              <th class="px-4 py-2">Nombre</th>
+              <th class="px-4 py-2">Tipo</th>
+              <th class="px-4 py-2 text-right">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="a in filteredAccounts" :key="a.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs" x-text="a.code"></td>
+                <td class="px-4 py-2" x-text="a.name"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs px-2 py-0.5 rounded" :class="typeBadge(a.type)"
+                        x-text="typeLabel(a.type)"></span>
+                </td>
+                <td class="px-4 py-2 text-right font-medium" x-text="money(a.balance)"></td>
+              </tr>
+            </template>
+            <template x-if="!filteredAccounts.length">
+              <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Sin cuentas</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== JOURNAL ===== -->
+  <template x-if="tab === 'journal'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-1">Nuevo asiento contable</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          El asiento debe estar balanceado: total debe = total haber.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <input x-model="jForm.description" placeholder="Descripción *"
+                 class="border border-gray-300 rounded px-3 py-2 md:col-span-2">
+          <input x-model="jForm.date" type="date"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+
+        <div class="border border-gray-200 rounded mb-3">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left">
+              <tr>
+                <th class="px-3 py-2">Cuenta</th>
+                <th class="px-3 py-2 w-32">Debe</th>
+                <th class="px-3 py-2 w-32">Haber</th>
+                <th class="px-3 py-2 w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(l, i) in jForm.lines" :key="i">
+                <tr class="border-t border-gray-100">
+                  <td class="px-3 py-2">
+                    <select x-model="l.account_id"
+                            class="w-full border border-gray-300 rounded px-2 py-1">
+                      <option value="">Selecciona…</option>
+                      <template x-for="a in accounts" :key="a.id">
+                        <option :value="a.id" x-text="a.code + ' · ' + a.name"></option>
+                      </template>
+                    </select>
+                  </td>
+                  <td class="px-3 py-2">
+                    <input type="number" min="0" step="0.01" x-model.number="l.debit"
+                           class="w-full border border-gray-300 rounded px-2 py-1">
+                  </td>
+                  <td class="px-3 py-2">
+                    <input type="number" min="0" step="0.01" x-model.number="l.credit"
+                           class="w-full border border-gray-300 rounded px-2 py-1">
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <button @click="jForm.lines.splice(i,1)" x-show="jForm.lines.length > 2"
+                            class="text-red-500 hover:text-red-700">×</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+            <tfoot class="bg-gray-50 font-medium">
+              <tr class="border-t border-gray-200">
+                <td class="px-3 py-2 text-right">Totales</td>
+                <td class="px-3 py-2" x-text="money(totalDebit)"></td>
+                <td class="px-3 py-2" x-text="money(totalCredit)"></td>
+                <td class="px-3 py-2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="flex justify-between items-center">
+          <button @click="jForm.lines.push({account_id:'', debit:0, credit:0})"
+                  class="text-sm text-brand hover:underline">+ Agregar línea</button>
+          <span class="text-sm font-medium"
+                :class="isBalanced ? 'text-ok' : 'text-warn'"
+                x-text="isBalanced ? '✓ Balanceado' : 'Diferencia: ' + money(Math.abs(totalDebit - totalCredit))"></span>
+        </div>
+
+        <button @click="createJournal()" :disabled="busy || !canPostJournal"
+                class="mt-4 bg-brand text-white px-5 py-2 rounded font-medium disabled:opacity-40">
+          <span x-text="busy ? 'Registrando…' : 'Registrar asiento'"></span>
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Asientos (<span x-text="journal.length"></span>)
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Fecha</th>
+              <th class="px-4 py-2">Descripción</th>
+              <th class="px-4 py-2 text-right">Debe</th>
+              <th class="px-4 py-2 text-right">Haber</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="e in journal" :key="e.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 text-xs text-gray-500"
+                    x-text="(e.date || e.created_at || '').slice(0,10)"></td>
+                <td class="px-4 py-2" x-text="e.description"></td>
+                <td class="px-4 py-2 text-right" x-text="money(e.debit_total ?? e.total_debit ?? e.total)"></td>
+                <td class="px-4 py-2 text-right" x-text="money(e.credit_total ?? e.total_credit ?? e.total)"></td>
+              </tr>
+            </template>
+            <template x-if="!journal.length">
+              <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Sin asientos</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+  <!-- ===== STATEMENTS ===== -->
+  <template x-if="tab === 'statements'">
+    <div class="space-y-6">
+      <!-- Income statement -->
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-4">Estado de resultados</h2>
+        <template x-if="income.revenue !== undefined || income.total_revenue !== undefined">
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between py-1.5 border-b border-gray-100">
+              <span>Ingresos</span>
+              <span class="font-medium text-ok" x-text="money(income.total_revenue ?? income.revenue)"></span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-gray-100">
+              <span>Gastos</span>
+              <span class="font-medium text-warn" x-text="money(income.total_expenses ?? income.expenses)"></span>
+            </div>
+            <div class="flex justify-between py-2 text-base font-bold">
+              <span>Resultado neto</span>
+              <span :class="(income.net_income ?? 0) >= 0 ? 'text-ok' : 'text-red-600'"
+                    x-text="money(income.net_income ?? income.net)"></span>
+            </div>
+          </div>
+        </template>
+        <template x-if="income.revenue === undefined && income.total_revenue === undefined">
+          <p class="text-sm text-gray-400">Sin datos todavía</p>
+        </template>
+      </section>
+
+      <!-- Balance sheet -->
+      <section class="bg-white rounded-lg border border-gray-200 p-6">
+        <h2 class="font-semibold mb-4">Balance general</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div class="border border-gray-200 rounded p-4">
+            <div class="text-xs uppercase text-gray-500 mb-1">Activo</div>
+            <div class="text-xl font-bold" x-text="money(balance.total_assets ?? balance.assets)"></div>
+          </div>
+          <div class="border border-gray-200 rounded p-4">
+            <div class="text-xs uppercase text-gray-500 mb-1">Pasivo</div>
+            <div class="text-xl font-bold" x-text="money(balance.total_liabilities ?? balance.liabilities)"></div>
+          </div>
+          <div class="border border-gray-200 rounded p-4">
+            <div class="text-xs uppercase text-gray-500 mb-1">Capital</div>
+            <div class="text-xl font-bold" x-text="money(balance.total_equity ?? balance.equity)"></div>
+          </div>
+        </div>
+        <p class="mt-3 text-sm"
+           :class="balance.balanced || balance.is_balanced ? 'text-ok' : 'text-warn'"
+           x-text="(balance.balanced || balance.is_balanced)
+             ? '✓ Activo = Pasivo + Capital'
+             : 'Verificar cuadre contable'"></p>
+      </section>
+
+      <!-- Trial balance -->
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">Balanza de comprobación</div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Cuenta</th>
+              <th class="px-4 py-2 text-right">Debe</th>
+              <th class="px-4 py-2 text-right">Haber</th>
+              <th class="px-4 py-2 text-right">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="r in trialRows" :key="r.code || r.account_code || r.id">
+              <tr class="border-t border-gray-100">
+                <td class="px-4 py-2">
+                  <span class="font-mono text-xs text-gray-500"
+                        x-text="r.code || r.account_code"></span>
+                  <span x-text="' ' + (r.name || r.account_name || '')"></span>
+                </td>
+                <td class="px-4 py-2 text-right" x-text="money(r.total_debit ?? r.debit)"></td>
+                <td class="px-4 py-2 text-right" x-text="money(r.total_credit ?? r.credit)"></td>
+                <td class="px-4 py-2 text-right font-medium" x-text="money(r.balance)"></td>
+              </tr>
+            </template>
+            <template x-if="!trialRows.length">
+              <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Sin movimientos</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== COST CENTERS ===== -->
+  <template x-if="tab === 'cost'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Asignar importe a centro de costo</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <select x-model="ccForm.cost_center_id" class="border border-gray-300 rounded px-3 py-2">
+            <option value="">Centro de costo…</option>
+            <template x-for="c in costCenters" :key="c.id">
+              <option :value="c.id" x-text="c.code + ' · ' + c.name"></option>
+            </template>
+          </select>
+          <input x-model.number="ccForm.amount" type="number" step="0.01" placeholder="Importe *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="ccForm.entry_date" type="date"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="ccForm.description" placeholder="Concepto"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+        <button @click="allocate()" :disabled="busy || !ccForm.cost_center_id || !ccForm.amount"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Asignar
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">Gasto por centro de costo</div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Código</th>
+              <th class="px-4 py-2">Centro de costo</th>
+              <th class="px-4 py-2 text-right">Líneas</th>
+              <th class="px-4 py-2 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="c in (ccReport.cost_centers || [])" :key="c.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs" x-text="c.code"></td>
+                <td class="px-4 py-2" x-text="c.name"></td>
+                <td class="px-4 py-2 text-right text-gray-500" x-text="c.lines"></td>
+                <td class="px-4 py-2 text-right font-medium" x-text="money(c.total)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== BUDGETS ===== -->
+  <template x-if="tab === 'budgets'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nuevo presupuesto</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <input x-model="bForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="bForm.fiscal_year" placeholder="Ejercicio (2026)"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="bForm.date_from" type="date"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="bForm.date_to" type="date"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+
+        <label class="block text-sm font-medium mb-2">Líneas presupuestales</label>
+        <template x-for="(l, i) in bForm.lines" :key="i">
+          <div class="flex gap-2 mb-2">
+            <select x-model="l.cost_center_id" class="flex-1 border border-gray-300 rounded px-3 py-2">
+              <option value="">Centro de costo…</option>
+              <template x-for="c in costCenters" :key="c.id">
+                <option :value="c.id" x-text="c.code + ' · ' + c.name"></option>
+              </template>
+            </select>
+            <input x-model.number="l.planned_amount" type="number" step="0.01" placeholder="Monto planeado"
+                   class="w-40 border border-gray-300 rounded px-3 py-2">
+            <button @click="bForm.lines.splice(i,1)" x-show="bForm.lines.length > 1"
+                    class="px-3 text-red-500 hover:text-red-700">×</button>
+          </div>
+        </template>
+        <button @click="bForm.lines.push({cost_center_id:'', planned_amount:0})"
+                class="text-sm text-brand hover:underline">+ Agregar línea</button>
+
+        <div class="mt-4">
+          <button @click="createBudget()" :disabled="busy || !bForm.name"
+                  class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+            Crear presupuesto
+          </button>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Presupuestos (<span x-text="budgets.length"></span>)
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Nombre</th>
+              <th class="px-4 py-2">Ejercicio</th>
+              <th class="px-4 py-2">Periodo</th>
+              <th class="px-4 py-2">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="b in budgets" :key="b.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium" x-text="b.name"></td>
+                <td class="px-4 py-2" x-text="b.fiscal_year || '—'"></td>
+                <td class="px-4 py-2 text-xs text-gray-500"
+                    x-text="(b.date_from || '') + ' → ' + (b.date_to || '')"></td>
+                <td class="px-4 py-2">
+                  <button @click="loadVsActual(b.id)"
+                          class="text-xs px-2 py-1 rounded bg-brand text-white">
+                    Presupuesto vs real
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!budgets.length">
+              <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Sin presupuestos</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <template x-if="vsActual.lines">
+        <section class="bg-white rounded-lg border border-gray-200 p-6">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h2 class="font-semibold" x-text="vsActual.budget"></h2>
+              <p class="text-sm text-gray-500">
+                Consumido <span class="font-medium" x-text="(vsActual.totals?.consumed_pct ?? 0) + '%'"></span>
+                · planeado <span x-text="money(vsActual.totals?.planned)"></span>
+                · real <span x-text="money(vsActual.totals?.actual)"></span>
+              </p>
+            </div>
+            <button @click="vsActual = {}" class="text-gray-400 hover:text-gray-700">×</button>
+          </div>
+
+          <div class="space-y-3">
+            <template x-for="l in vsActual.lines" :key="l.cost_center || l.account_code">
+              <div>
+                <div class="flex justify-between text-sm mb-1">
+                  <span x-text="l.cost_center || l.account_name || '—'"></span>
+                  <span>
+                    <span class="font-medium" x-text="money(l.actual)"></span>
+                    <span class="text-gray-400"> / <span x-text="money(l.planned)"></span></span>
+                    <span class="ml-2 text-xs" :class="l.over_budget ? 'text-red-600' : 'text-gray-500'"
+                          x-text="l.consumed_pct + '%'"></span>
+                  </span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                  <div class="h-2 rounded-full"
+                       :class="l.over_budget ? 'bg-red-500' : (l.consumed_pct > 80 ? 'bg-warn' : 'bg-ok')"
+                       :style="`width: ${Math.min(l.consumed_pct || 0, 100)}%`"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </section>
+      </template>
+    </div>
+  </template>
+</div>
+<script>
+function conta() {
+  return {
+    tab: 'accounts',
+    tabs: [
+      { id: 'accounts', label: 'Plan de cuentas' },
+      { id: 'journal', label: 'Asientos' },
+      { id: 'statements', label: 'Estados financieros' },
+      { id: 'cost', label: 'Centros de costo' },
+      { id: 'budgets', label: 'Presupuestos' },
+    ],
+    accounts: [], journal: [], costCenters: [], budgets: [],
+    income: {}, balance: {}, trial: {}, ccReport: {}, vsActual: {},
+    accFilter: '',
+    aForm: { code: '', name: '', type: 'expense' },
+    jForm: { description: '', date: '', lines: [
+      { account_id: '', debit: 0, credit: 0 },
+      { account_id: '', debit: 0, credit: 0 },
+    ] },
+    ccForm: { cost_center_id: '', amount: null, entry_date: '', description: '' },
+    bForm: { name: '', fiscal_year: '', date_from: '', date_to: '',
+             lines: [{ cost_center_id: '', planned_amount: 0 }] },
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    typeLabels: {
+      asset: 'Activo', liability: 'Pasivo', equity: 'Capital',
+      revenue: 'Ingreso', expense: 'Gasto',
+    },
+    typeLabel(t) { return this.typeLabels[t] || t || '—' },
+    typeBadge(t) {
+      return {
+        asset: 'bg-blue-50 text-brand',
+        liability: 'bg-amber-50 text-warn',
+        equity: 'bg-purple-50 text-purple-700',
+        revenue: 'bg-green-50 text-ok',
+        expense: 'bg-red-50 text-red-700',
+      }[t] || 'bg-gray-100 text-gray-600';
+    },
+
+    money(v) {
+      return Number(v || 0).toLocaleString('es-MX',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    get filteredAccounts() {
+      if (!this.accFilter) return this.accounts;
+      return this.accounts.filter(a => a.type === this.accFilter);
+    },
+
+    get totalDebit() {
+      return this.jForm.lines.reduce((s, l) => s + Number(l.debit || 0), 0);
+    },
+    get totalCredit() {
+      return this.jForm.lines.reduce((s, l) => s + Number(l.credit || 0), 0);
+    },
+    get isBalanced() {
+      return this.totalDebit > 0 && Math.abs(this.totalDebit - this.totalCredit) < 0.01;
+    },
+    get canPostJournal() {
+      return this.jForm.description && this.isBalanced &&
+             this.jForm.lines.filter(l => l.account_id &&
+               (Number(l.debit) > 0 || Number(l.credit) > 0)).length >= 2;
+    },
+
+    get trialRows() {
+      if (Array.isArray(this.trial)) return this.trial;
+      return this.trial.accounts || this.trial.rows || this.trial.lines || [];
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadAccounts(), this.loadJournal(), this.loadStatements(),
+        this.loadCostCenters(), this.loadBudgets(),
+      ]);
+    },
+
+    async loadAccounts() {
+      try {
+        const a = await this.api('GET', '/api/accounts');
+        this.accounts = Array.isArray(a) ? a : (a.accounts || []);
+      } catch (e) { this.notify('Error al cargar cuentas: ' + e.message, 'error') }
+    },
+
+    async loadJournal() {
+      try {
+        const j = await this.api('GET', '/api/journal');
+        this.journal = Array.isArray(j) ? j : (j.entries || []);
+      } catch (e) {}
+    },
+
+    async loadStatements() {
+      try { this.income = await this.api('GET', '/api/accounting/income-statement') || {} } catch (e) {}
+      try { this.balance = await this.api('GET', '/api/accounting/balance-sheet') || {} } catch (e) {}
+      try { this.trial = await this.api('GET', '/api/accounting/trial-balance') || {} } catch (e) {}
+    },
+
+    async loadCostCenters() {
+      try {
+        const c = await this.api('GET', '/api/cost-centers');
+        this.costCenters = Array.isArray(c) ? c : (c.cost_centers || []);
+      } catch (e) {}
+      try { this.ccReport = await this.api('GET', '/api/cost-centers/report') || {} } catch (e) {}
+    },
+
+    async loadBudgets() {
+      try {
+        const b = await this.api('GET', '/api/budgets');
+        this.budgets = Array.isArray(b) ? b : (b.budgets || []);
+      } catch (e) {}
+    },
+
+    async createAccount() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/accounts', {
+          code: this.aForm.code, name: this.aForm.name, type: this.aForm.type,
+        });
+        this.notify(`Cuenta creada: ${r.code || this.aForm.code} · ${r.name || this.aForm.name}`);
+        this.aForm = { code: '', name: '', type: 'expense' };
+        await this.loadAccounts();
+      } catch (e) {
+        this.notify('Error al crear la cuenta: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createJournal() {
+      if (!this.canPostJournal) return;
+      this.busy = true;
+      try {
+        const lines = this.jForm.lines
+          .filter(l => l.account_id && (Number(l.debit) > 0 || Number(l.credit) > 0))
+          .map(l => ({ account_id: Number(l.account_id),
+                       debit: Number(l.debit || 0),
+                       credit: Number(l.credit || 0) }));
+        const r = await this.api('POST', '/api/journal', {
+          description: this.jForm.description,
+          date: this.jForm.date || undefined,
+          lines,
+        });
+        this.notify(`Asiento registrado${r.id ? ' #' + r.id : ''} · ${this.money(this.totalDebit)}`);
+        this.jForm = { description: '', date: '', lines: [
+          { account_id: '', debit: 0, credit: 0 },
+          { account_id: '', debit: 0, credit: 0 },
+        ] };
+        await Promise.all([this.loadJournal(), this.loadAccounts(), this.loadStatements()]);
+      } catch (e) {
+        this.notify('Error al registrar el asiento: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async allocate() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/cost-centers/allocate', {
+          cost_center_id: Number(this.ccForm.cost_center_id),
+          amount: Number(this.ccForm.amount),
+          entry_date: this.ccForm.entry_date || undefined,
+          description: this.ccForm.description || undefined,
+        });
+        this.notify(`Asignado ${this.money(r.amount ?? this.ccForm.amount)} al centro de costo`);
+        this.ccForm = { cost_center_id: '', amount: null, entry_date: '', description: '' };
+        await this.loadCostCenters();
+      } catch (e) {
+        this.notify('Error al asignar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createBudget() {
+      this.busy = true;
+      try {
+        const lines = this.bForm.lines
+          .filter(l => l.cost_center_id && l.planned_amount)
+          .map(l => ({ cost_center_id: Number(l.cost_center_id),
+                       planned_amount: Number(l.planned_amount) }));
+        const r = await this.api('POST', '/api/budgets', {
+          name: this.bForm.name,
+          fiscal_year: this.bForm.fiscal_year || undefined,
+          date_from: this.bForm.date_from || undefined,
+          date_to: this.bForm.date_to || undefined,
+          lines,
+        });
+        this.notify(`Presupuesto creado: ${r.name || this.bForm.name} · ${r.lines ?? lines.length} líneas`);
+        this.bForm = { name: '', fiscal_year: '', date_from: '', date_to: '',
+                       lines: [{ cost_center_id: '', planned_amount: 0 }] };
+        await this.loadBudgets();
+      } catch (e) {
+        this.notify('Error al crear el presupuesto: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async loadVsActual(budgetId) {
+      this.busy = true;
+      try {
+        this.vsActual = await this.api('GET', `/api/budgets/vs-actual?budget_id=${budgetId}`);
+      } catch (e) {
+        this.notify('Error al comparar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>

@@ -138,7 +138,7 @@ def journal_list(from_date=None, to_date=None, **kwargs):
     """List journal entries."""
     db = get_db()
     query = """
-        je.*, je.description as entry_description,
+        SELECT je.*, je.description as entry_description,
         je.debit_total, je.credit_total
         FROM journal_entries je
     """
