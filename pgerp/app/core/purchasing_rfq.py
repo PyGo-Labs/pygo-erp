@@ -78,9 +78,22 @@ def rfq_create(lines=None, deadline=None, notes=None, company_id=None, user_id=N
     )
     rfq_id = cur.lastrowid
     for l in lines:
+        # Accept qty or quantity; a missing/zero amount is an error rather than
+        # a silent default of 1, which produced wrong purchase orders.
+        raw_qty = l.get("qty", l.get("quantity"))
+        try:
+            qty = float(raw_qty)
+        except (TypeError, ValueError):
+            db.rollback()
+            db.close()
+            return {"error": f"line for producto_id {l.get('producto_id')} needs qty"}
+        if qty <= 0:
+            db.rollback()
+            db.close()
+            return {"error": f"qty must be > 0 for producto_id {l.get('producto_id')}"}
         db.execute(
             "INSERT INTO rfq_lines (rfq_id, producto_id, qty, uom_id) VALUES (?, ?, ?, ?)",
-            (rfq_id, l.get("producto_id"), float(l.get("qty", 1)), l.get("uom_id")),
+            (rfq_id, l.get("producto_id"), qty, l.get("uom_id")),
         )
     db.commit()
     return {"id": rfq_id, "folio": folio, "status": "draft", "lines": len(lines)}
@@ -114,7 +127,7 @@ def rfq_quotes_add(rfq_id=None, supplier_id=None, lines=None, lead_time_days=0, 
     if not db.execute("SELECT 1 FROM rfqs WHERE id = ?", (rfq_id,)).fetchone():
         return {"error": "rfq not found"}
 
-    total = sum(float(l.get("qty", 1)) * float(l.get("unit_price", 0)) for l in lines)
+    total = sum(float(l.get("qty", l.get("quantity", 1)) or 1) * float(l.get("unit_price", 0)) for l in lines)
     cur = db.execute(
         "INSERT INTO rfq_quotes (rfq_id, supplier_id, total, currency, lead_time_days, notes) "
         "VALUES (?, ?, ?, ?, ?, ?)",
@@ -124,7 +137,9 @@ def rfq_quotes_add(rfq_id=None, supplier_id=None, lines=None, lead_time_days=0, 
     for l in lines:
         db.execute(
             "INSERT INTO rfq_quote_lines (quote_id, producto_id, qty, unit_price) VALUES (?, ?, ?, ?)",
-            (quote_id, l.get("producto_id"), float(l.get("qty", 1)), float(l.get("unit_price", 0))),
+            (quote_id, l.get("producto_id"),
+             float(l.get("qty", l.get("quantity", 1)) or 1),
+             float(l.get("unit_price", 0))),
         )
     db.execute("UPDATE rfqs SET status = 'quoted' WHERE id = ? AND status IN ('draft','sent')", (rfq_id,))
     db.commit()

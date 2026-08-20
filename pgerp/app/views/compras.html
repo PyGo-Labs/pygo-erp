@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compras — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="text-warn font-medium">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/productos" class="hover:text-warn">Productos</a>
+  </div>
+  <a href="/setup" class="text-sm opacity-75 hover:opacity-100">Configuración</a>
+</nav>
+
+<div x-data="compras()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+
+  <h1 class="text-2xl font-bold mb-1">Compras</h1>
+  <p class="text-sm text-gray-500 mb-6">
+    Cotización → comparación de proveedores → orden de compra → recepción
+  </p>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-6 border-b border-gray-200">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+              class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+              :class="tab === t.id ? 'border-brand text-brand'
+                                   : 'border-transparent text-gray-500 hover:text-gray-800'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <!-- ============ SUPPLIERS ============ -->
+  <template x-if="tab === 'suppliers'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nuevo proveedor</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input x-model="sForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="sForm.email" placeholder="Email"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="sForm.country" placeholder="País (MX, DE…)" maxlength="2"
+                 class="border border-gray-300 rounded px-3 py-2 uppercase">
+          <input x-model.number="sForm.lead_time_days" type="number" min="0"
+                 placeholder="Días de entrega"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+        <button @click="createSupplier()" :disabled="busy || !sForm.name"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Guardar proveedor
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Proveedores (<span x-text="suppliers.length"></span>)
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Nombre</th>
+              <th class="px-4 py-2">País</th>
+              <th class="px-4 py-2">Email</th>
+              <th class="px-4 py-2 text-right">Días entrega</th>
+              <th class="px-4 py-2 text-right">Órdenes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="s in suppliers" :key="s.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium" x-text="s.name"></td>
+                <td class="px-4 py-2" x-text="s.country || '—'"></td>
+                <td class="px-4 py-2 text-gray-600" x-text="s.email || '—'"></td>
+                <td class="px-4 py-2 text-right" x-text="s.lead_time_days ?? '—'"></td>
+                <td class="px-4 py-2 text-right" x-text="s.purchase_orders ?? 0"></td>
+              </tr>
+            </template>
+            <template x-if="!suppliers.length">
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">
+                Sin proveedores
+              </td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <!-- ============ RFQ ============ -->
+  <template x-if="tab === 'rfq'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nueva solicitud de cotización</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Fecha límite</label>
+            <input x-model="rForm.deadline" type="date"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Notas</label>
+            <input x-model="rForm.notes" placeholder="Condiciones, referencia…"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+        </div>
+
+        <label class="block text-sm font-medium mb-2">Productos solicitados</label>
+        <template x-for="(l, i) in rForm.lines" :key="i">
+          <div class="flex gap-2 mb-2">
+            <select x-model="l.producto_id"
+                    class="flex-1 border border-gray-300 rounded px-3 py-2">
+              <option value="">Selecciona producto…</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="p.codigo + ' · ' + p.nombre"></option>
+              </template>
+            </select>
+            <input x-model.number="l.quantity" type="number" min="1" placeholder="Cant."
+                   class="w-28 border border-gray-300 rounded px-3 py-2">
+            <button @click="rForm.lines.splice(i,1)" x-show="rForm.lines.length > 1"
+                    class="px-3 text-red-500 hover:text-red-700">×</button>
+          </div>
+        </template>
+        <button @click="rForm.lines.push({producto_id:'', quantity:1})"
+                class="text-sm text-brand hover:underline">+ Agregar producto</button>
+
+        <div class="mt-4">
+          <button @click="createRfq()" :disabled="busy || !canRfq"
+                  class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+            Crear RFQ
+          </button>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Solicitudes (<span x-text="rfqs.length"></span>)
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Folio</th>
+              <th class="px-4 py-2">Estado</th>
+              <th class="px-4 py-2 text-right">Líneas</th>
+              <th class="px-4 py-2 text-right">Cotizaciones</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="r in rfqs" :key="r.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs" x-text="r.folio || ('#'+r.id)"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs px-2 py-0.5 rounded" :class="badge(r.status)"
+                        x-text="statusLabel(r.status)"></span>
+                </td>
+                <td class="px-4 py-2 text-right" x-text="(r.lines || []).length"></td>
+                <td class="px-4 py-2 text-right" x-text="r.quotes_count ?? (r.quotes || []).length"></td>
+                <td class="px-4 py-2">
+                  <div class="flex gap-1.5">
+                    <button x-show="r.status === 'draft'" @click="sendRfq(r.id)"
+                            class="text-xs px-2 py-1 rounded bg-brand text-white">Enviar</button>
+                    <button @click="openQuote(r)"
+                            class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                      Cotizar
+                    </button>
+                    <button @click="compare(r.id)"
+                            class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                      Comparar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!rfqs.length">
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Sin solicitudes</td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+  <!-- Quote modal -->
+  <template x-if="quoteFor">
+    <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+         @click.self="quoteFor = null">
+      <div class="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <h2 class="font-semibold mb-1">Registrar cotización de proveedor</h2>
+        <p class="text-sm text-gray-500 mb-4">
+          RFQ <span class="font-mono" x-text="quoteFor.folio || ('#'+quoteFor.id)"></span>
+        </p>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Proveedor *</label>
+            <select x-model="qForm.supplier_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Selecciona…</option>
+              <template x-for="s in suppliers" :key="s.id">
+                <option :value="s.id" x-text="s.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Días de entrega</label>
+            <input x-model.number="qForm.delivery_days" type="number" min="0"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+        </div>
+
+        <label class="block text-sm font-medium mb-2">Precios ofertados</label>
+        <template x-for="(l, i) in qForm.lines" :key="i">
+          <div class="flex gap-2 mb-2 items-center">
+            <span class="flex-1 text-sm" x-text="productName(l.producto_id)"></span>
+            <span class="text-xs text-gray-500 w-20 text-right"
+                  x-text="'x' + l.quantity"></span>
+            <input x-model.number="l.unit_price" type="number" min="0" step="0.01"
+                   placeholder="Precio unit."
+                   class="w-32 border border-gray-300 rounded px-2 py-1">
+            <span class="w-28 text-right text-sm font-medium"
+                  x-text="money((l.quantity||0)*(l.unit_price||0))"></span>
+          </div>
+        </template>
+
+        <div class="flex justify-between items-center mt-4 pt-3 border-t">
+          <span class="font-semibold">Total: <span x-text="money(quoteTotal)"></span></span>
+          <div class="flex gap-2">
+            <button @click="quoteFor = null"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+            <button @click="submitQuote()" :disabled="busy || !qForm.supplier_id"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Guardar cotización
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Comparison -->
+  <template x-if="comparison">
+    <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+      <div class="flex justify-between items-start mb-4">
+        <div>
+          <h2 class="font-semibold">Comparación de proveedores</h2>
+          <p class="text-sm text-gray-500"
+             x-text="'RFQ ' + (comparison.folio || comparison.rfq_id)"></p>
+        </div>
+        <button @click="comparison = null" class="text-gray-400 hover:text-gray-700">×</button>
+      </div>
+
+      <template x-if="comparison.recommendation">
+        <div class="mb-4 px-4 py-3 rounded bg-green-50 border border-green-200 text-sm">
+          <span class="font-semibold text-ok">Recomendación:</span>
+          <span x-text="comparison.recommendation.reason || comparison.recommendation.supplier_name || ''"></span>
+        </div>
+      </template>
+
+      <table class="w-full text-sm border border-gray-200 rounded">
+        <thead class="bg-gray-50 text-left text-gray-600">
+          <tr>
+            <th class="px-3 py-2">Proveedor</th>
+            <th class="px-3 py-2 text-right">Total</th>
+            <th class="px-3 py-2 text-right">Entrega</th>
+            <th class="px-3 py-2">Notas</th>
+            <th class="px-3 py-2">Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="q in (comparison.quotes || [])" :key="q.quote_id || q.id">
+            <tr class="border-t border-gray-100"
+                :class="isBest(q) ? 'bg-green-50' : ''">
+              <td class="px-3 py-2 font-medium">
+                <span x-text="q.supplier_name || q.supplier_id"></span>
+                <span x-show="isBest(q)" class="ml-2 text-xs text-ok font-semibold">mejor precio</span>
+              </td>
+              <td class="px-3 py-2 text-right font-medium" x-text="money(q.total)"></td>
+              <td class="px-3 py-2 text-right" x-text="(q.delivery_days ?? '—') + ' d'"></td>
+              <td class="px-3 py-2 text-gray-500 text-xs" x-text="q.notes || '—'"></td>
+              <td class="px-3 py-2">
+                <button @click="award(q.quote_id || q.id)"
+                        class="text-xs px-2 py-1 rounded bg-ok text-white hover:opacity-90">
+                  Adjudicar
+                </button>
+              </td>
+            </tr>
+          </template>
+          <template x-if="!(comparison.quotes || []).length">
+            <tr><td colspan="5" class="px-3 py-6 text-center text-gray-400">
+              Aún sin cotizaciones para comparar
+            </td></tr>
+          </template>
+        </tbody>
+      </table>
+    </section>
+  </template>
+
+  <!-- ============ RECEIPTS ============ -->
+  <template x-if="tab === 'receipts'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+          Órdenes pendientes de recibir
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Folio</th>
+              <th class="px-4 py-2">Proveedor</th>
+              <th class="px-4 py-2">Estado</th>
+              <th class="px-4 py-2 text-right">Total</th>
+              <th class="px-4 py-2">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="p in pending" :key="p.id || p.purchase_order_id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs" x-text="p.folio || ('#'+(p.id||p.purchase_order_id))"></td>
+                <td class="px-4 py-2" x-text="p.supplier_name || p.supplier_id || '—'"></td>
+                <td class="px-4 py-2">
+                  <span class="text-xs px-2 py-0.5 rounded" :class="badge(p.status)"
+                        x-text="statusLabel(p.status)"></span>
+                </td>
+                <td class="px-4 py-2 text-right" x-text="money(p.total)"></td>
+                <td class="px-4 py-2">
+                  <button @click="openReceipt(p)"
+                          class="text-xs px-2 py-1 rounded bg-brand text-white hover:opacity-90">
+                    Recibir
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!pending.length">
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">
+                Nada pendiente de recibir
+              </td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Receipt form -->
+      <template x-if="receiptFor">
+        <section class="bg-white rounded-lg border-2 border-brand p-6">
+          <h2 class="font-semibold mb-1">Registrar recepción</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Orden <span class="font-mono" x-text="receiptFor.folio || ('#'+receiptFor.id)"></span>
+            — puedes recibir parcialmente
+          </p>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Almacén destino</label>
+            <select x-model="recForm.warehouse_id"
+                    class="w-full md:w-64 border border-gray-300 rounded px-3 py-2">
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+          </div>
+
+          <template x-for="(l, i) in recForm.lines" :key="i">
+            <div class="flex gap-3 mb-2 items-center">
+              <span class="flex-1 text-sm" x-text="productName(l.producto_id)"></span>
+              <span class="text-xs text-gray-500">pedido: <span x-text="l.ordered"></span></span>
+              <span class="text-xs text-gray-500">ya recibido: <span x-text="l.received || 0"></span></span>
+              <input x-model.number="l.qty" type="number" min="0" :max="l.ordered - (l.received||0)"
+                     class="w-28 border border-gray-300 rounded px-2 py-1">
+            </div>
+          </template>
+
+          <div class="flex gap-2 mt-4">
+            <button @click="receiptFor = null"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+            <button @click="submitReceipt()" :disabled="busy"
+                    class="bg-ok text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Confirmar recepción
+            </button>
+          </div>
+        </section>
+      </template>
+    </div>
+  </template>
+</div>
+<script>
+function compras() {
+  return {
+    tab: 'suppliers',
+    tabs: [
+      { id: 'suppliers', label: 'Proveedores' },
+      { id: 'rfq', label: 'Cotizaciones (RFQ)' },
+      { id: 'receipts', label: 'Recepciones' },
+    ],
+    suppliers: [], rfqs: [], pending: [], productos: [], warehouses: [],
+    sForm: { name: '', email: '', country: '', lead_time_days: null },
+    rForm: { deadline: '', notes: '', lines: [{ producto_id: '', quantity: 1 }] },
+    qForm: { supplier_id: '', delivery_days: null, lines: [] },
+    recForm: { warehouse_id: '', lines: [] },
+    quoteFor: null, receiptFor: null, comparison: null,
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    statusLabels: {
+      draft: 'Borrador', sent: 'Enviada', closed: 'Cerrada', awarded: 'Adjudicada',
+      confirmed: 'Confirmada', received: 'Recibida',
+      partially_received: 'Parcial', cancelled: 'Cancelada',
+    },
+    statusLabel(s) { return this.statusLabels[s] || s || '—' },
+
+    badge(s) {
+      return {
+        draft: 'bg-gray-100 text-gray-700',
+        sent: 'bg-blue-50 text-brand',
+        awarded: 'bg-green-50 text-ok',
+        received: 'bg-green-50 text-ok',
+        partially_received: 'bg-amber-50 text-warn',
+        confirmed: 'bg-blue-50 text-brand',
+        cancelled: 'bg-red-50 text-red-700',
+      }[s] || 'bg-gray-100 text-gray-600';
+    },
+
+    money(v) {
+      return Number(v || 0).toLocaleString('es-MX',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    productName(id) {
+      const p = this.productos.find(x => String(x.id) === String(id));
+      return p ? `${p.codigo} · ${p.nombre}` : `Producto ${id}`;
+    },
+
+    get canRfq() {
+      return this.rForm.lines.some(l => l.producto_id && l.quantity > 0);
+    },
+
+    get quoteTotal() {
+      return this.qForm.lines.reduce(
+        (s, l) => s + (l.quantity || 0) * (l.unit_price || 0), 0);
+    },
+
+    isBest(q) {
+      const quotes = (this.comparison?.quotes || []).filter(x => Number(x.total) > 0);
+      if (!quotes.length) return false;
+      const min = Math.min(...quotes.map(x => Number(x.total)));
+      return Number(q.total) === min;
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadSuppliers(), this.loadRfqs(), this.loadPending(), this.loadRefs(),
+      ]);
+    },
+
+    async loadSuppliers() {
+      try { this.suppliers = await this.api('GET', '/api/suppliers') || [] }
+      catch (e) { this.notify('Error al cargar proveedores: ' + e.message, 'error') }
+    },
+
+    async loadRfqs() {
+      try { this.rfqs = await this.api('GET', '/api/rfq') || [] } catch (e) {}
+    },
+
+    async loadPending() {
+      // receipts/pending needs a specific order, so the list comes from the
+      // purchase orders endpoint and we keep only what is still receivable.
+      try {
+        const all = await this.api('GET', '/api/sales/purchase') || [];
+        this.pending = all.filter(p =>
+          ['confirmed', 'partially_received', 'draft'].includes(p.status));
+      } catch (e) {}
+    },
+
+    async loadRefs() {
+      try { this.productos = await this.api('GET', '/api/productos') || [] } catch (e) {}
+      try {
+        this.warehouses = await this.api('GET', '/api/inventory/warehouses') || [];
+        if (this.warehouses.length) this.recForm.warehouse_id = this.warehouses[0].id;
+      } catch (e) {}
+    },
+
+    async createSupplier() {
+      if (!this.sForm.name) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/suppliers', {
+          name: this.sForm.name,
+          email: this.sForm.email || undefined,
+          country: (this.sForm.country || '').toUpperCase() || undefined,
+          lead_time_days: this.sForm.lead_time_days || undefined,
+        });
+        this.notify(`Proveedor creado: ${r.name}`);
+        this.sForm = { name: '', email: '', country: '', lead_time_days: null };
+        await this.loadSuppliers();
+      } catch (e) {
+        this.notify('Error al crear proveedor: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createRfq() {
+      if (!this.canRfq) return;
+      this.busy = true;
+      try {
+        // API contract: rfq lines use `qty`
+        const lines = this.rForm.lines
+          .filter(l => l.producto_id && l.quantity > 0)
+          .map(l => ({ producto_id: Number(l.producto_id), qty: Number(l.quantity) }));
+        const r = await this.api('POST', '/api/rfq', {
+          lines,
+          deadline: this.rForm.deadline || undefined,
+          notes: this.rForm.notes || undefined,
+        });
+        this.notify(`RFQ creada: ${r.folio || '#' + r.id}`);
+        this.rForm = { deadline: '', notes: '', lines: [{ producto_id: '', quantity: 1 }] };
+        await this.loadRfqs();
+      } catch (e) {
+        this.notify('Error al crear RFQ: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async sendRfq(id) {
+      this.busy = true;
+      try {
+        await this.api('POST', `/api/rfq/${id}/send`);
+        this.notify(`RFQ #${id} enviada a proveedores`);
+        await this.loadRfqs();
+      } catch (e) {
+        this.notify('Error al enviar RFQ: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    openQuote(rfq) {
+      this.quoteFor = rfq;
+      this.qForm = {
+        supplier_id: '', delivery_days: null,
+        lines: (rfq.lines || []).map(l => ({
+          producto_id: l.producto_id,
+          quantity: Number(l.qty ?? l.quantity ?? 0),
+          unit_price: 0,
+        })),
+      };
+    },
+
+    async submitQuote() {
+      if (!this.qForm.supplier_id) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/rfq/quotes', {
+          rfq_id: this.quoteFor.id,
+          supplier_id: Number(this.qForm.supplier_id),
+          delivery_days: this.qForm.delivery_days || undefined,
+          lines: this.qForm.lines.map(l => ({
+            producto_id: l.producto_id,
+            qty: Number(l.quantity),
+            unit_price: Number(l.unit_price || 0),
+          })),
+        });
+        this.notify(`Cotización registrada · total ${this.money(r.total)}`);
+        this.quoteFor = null;
+        await this.loadRfqs();
+      } catch (e) {
+        this.notify('Error al guardar cotización: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async compare(rfqId) {
+      this.busy = true;
+      try {
+        this.comparison = await this.api('GET', `/api/rfq/compare?rfq_id=${rfqId}`);
+        if (!(this.comparison.quotes || []).length) {
+          this.notify('Esta RFQ aún no tiene cotizaciones', 'error');
+        }
+      } catch (e) {
+        this.notify('Error al comparar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async award(quoteId) {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/rfq/award', { quote_id: quoteId });
+        this.notify(`Adjudicada · orden de compra ${r.folio || r.purchase_order_id || ''}`);
+        this.comparison = null;
+        await Promise.all([this.loadRfqs(), this.loadPending()]);
+        this.tab = 'receipts';
+      } catch (e) {
+        this.notify('Error al adjudicar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async openReceipt(po) {
+      this.receiptFor = po;
+      const poId = po.id || po.purchase_order_id;
+      // Ask the API for the real outstanding quantities per line
+      try {
+        const p = await this.api('GET', `/api/purchase/receipts/pending?purchase_order_id=${poId}`);
+        const lines = p.lines || [];
+        // API returns ordered / received / pending per line
+        this.recForm.lines = lines.map(l => ({
+          producto_id: l.producto_id,
+          ordered: Number(l.ordered ?? 0),
+          received: Number(l.received ?? 0),
+          qty: Number(l.pending ?? 0),
+        }));
+      } catch (e) {
+        // Fall back to whatever the order object carries
+        const lines = po.lines || po.items || [];
+        this.recForm.lines = lines.map(l => ({
+          producto_id: l.producto_id,
+          ordered: Number(l.quantity ?? 0),
+          received: Number(l.qty_received ?? 0),
+          qty: Math.max(Number(l.quantity ?? 0) - Number(l.qty_received ?? 0), 0),
+        }));
+      }
+      if (!this.recForm.warehouse_id && this.warehouses.length) {
+        this.recForm.warehouse_id = this.warehouses[0].id;
+      }
+    },
+
+    async submitReceipt() {
+      this.busy = true;
+      try {
+        const lines = this.recForm.lines
+          .filter(l => l.qty > 0)
+          // API contract: receipts.create expects qty_received per line
+          .map(l => ({ producto_id: l.producto_id, qty_received: Number(l.qty) }));
+        if (!lines.length) {
+          this.notify('Indica al menos una cantidad a recibir', 'error');
+          this.busy = false; return;
+        }
+        const r = await this.api('POST', '/api/purchase/receipts', {
+          purchase_order_id: this.receiptFor.id || this.receiptFor.purchase_order_id,
+          warehouse_id: Number(this.recForm.warehouse_id),
+          lines,
+        });
+        this.notify(`Recepción ${r.folio || ''} registrada` +
+          (r.order_status ? ` · orden: ${this.statusLabel(r.order_status)}` : ''));
+        this.receiptFor = null;
+        await this.loadPending();
+      } catch (e) {
+        this.notify('Error en la recepción: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>

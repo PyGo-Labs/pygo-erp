@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="text-warn font-medium">Inventario</a>
+    <a href="/productos" class="hover:text-warn">Productos</a>
+  </div>
+  <a href="/setup" class="text-sm opacity-75 hover:opacity-100">Configuración</a>
+</nav>
+
+<div x-data="inventario()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+
+  <h1 class="text-2xl font-bold mb-6">Inventario</h1>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Almacenes</div>
+      <div class="text-2xl font-bold" x-text="warehouses.length"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Líneas de stock</div>
+      <div class="text-2xl font-bold" x-text="stock.length"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Unidades totales</div>
+      <div class="text-2xl font-bold" x-text="totalUnits"></div>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+      <div class="text-xs uppercase text-gray-500">Alertas</div>
+      <div class="text-2xl font-bold" :class="alerts.length ? 'text-warn' : 'text-ok'"
+           x-text="alerts.length"></div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <template x-if="alerts.length">
+    <section class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+      <h2 class="font-semibold text-warn mb-2">Stock bajo mínimo</h2>
+      <div class="space-y-1 text-sm">
+        <template x-for="a in alerts" :key="a.producto_id + '-' + (a.warehouse_id || 0)">
+          <div class="flex justify-between">
+            <span x-text="(a.producto_codigo ? a.producto_codigo + ' · ' : '') + (a.producto_nombre || a.producto_id)"></span>
+            <span>
+              <span class="text-warn font-medium" x-text="a.quantity ?? a.stock_actual ?? 0"></span>
+              <span class="text-gray-500"> / mín <span x-text="a.stock_minimo ?? a.minimo ?? '—'"></span></span>
+            </span>
+          </div>
+        </template>
+      </div>
+    </section>
+  </template>
+
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-6 border-b border-gray-200">
+    <template x-for="t in tabs" :key="t.id">
+      <button @click="tab = t.id"
+              class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
+              :class="tab === t.id ? 'border-brand text-brand'
+                                   : 'border-transparent text-gray-500 hover:text-gray-800'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <!-- ===== STOCK ===== -->
+  <template x-if="tab === 'stock'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="font-semibold">Existencias</h2>
+          <select x-model="whFilter" class="text-sm border border-gray-300 rounded px-2 py-1">
+            <option value="">Todos los almacenes</option>
+            <template x-for="w in warehouses" :key="w.id">
+              <option :value="w.id" x-text="w.name"></option>
+            </template>
+          </select>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Producto</th>
+              <th class="px-4 py-2">Almacén</th>
+              <th class="px-4 py-2 text-right">Cantidad</th>
+              <th class="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="s in filteredStock" :key="s.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2">
+                  <span class="font-mono text-xs text-gray-500"
+                        x-text="s.producto_codigo || ''"></span>
+                  <span x-text="' ' + (s.producto_nombre || s.producto_id)"></span>
+                </td>
+                <td class="px-4 py-2" x-text="s.warehouse_name || s.warehouse_id"></td>
+                <td class="px-4 py-2 text-right font-medium"
+                    :class="Number(s.quantity) <= 0 ? 'text-red-600' : ''"
+                    x-text="s.quantity"></td>
+                <td class="px-4 py-2">
+                  <button @click="openAdjust(s)"
+                          class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                    Ajustar
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <template x-if="!filteredStock.length">
+              <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                Sin existencias registradas
+              </td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Adjust form -->
+      <template x-if="adjustFor">
+        <section class="bg-white rounded-lg border-2 border-brand p-6">
+          <h2 class="font-semibold mb-1">Ajustar existencias</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            <span x-text="adjustFor.producto_nombre || adjustFor.producto_id"></span>
+            en <span x-text="adjustFor.warehouse_name || adjustFor.warehouse_id"></span>
+            — actual: <span class="font-medium" x-text="adjustFor.quantity"></span>
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Nueva cantidad *</label>
+              <input x-model.number="adjForm.new_quantity" type="number" min="0" step="0.01"
+                     class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium mb-1">Motivo</label>
+              <input x-model="adjForm.reason" placeholder="Conteo físico, merma, corrección…"
+                     class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+          </div>
+          <div class="flex gap-2 mt-4">
+            <button @click="adjustFor = null"
+                    class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+            <button @click="submitAdjust()" :disabled="busy || adjForm.new_quantity === null"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Guardar ajuste
+            </button>
+          </div>
+        </section>
+      </template>
+    </div>
+  </template>
+  <!-- ===== TRANSFERS ===== -->
+  <template x-if="tab === 'transfer'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Transferir entre almacenes</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">Producto *</label>
+            <select x-model="tForm.producto_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Selecciona…</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="p.codigo + ' · ' + p.nombre"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Desde *</label>
+            <select x-model="tForm.from_warehouse_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Selecciona…</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Hacia *</label>
+            <select x-model="tForm.to_warehouse_id" class="w-full border border-gray-300 rounded px-3 py-2">
+              <option value="">Selecciona…</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Cantidad *</label>
+            <input x-model.number="tForm.quantity" type="number" min="0.01" step="0.01"
+                   class="w-full border border-gray-300 rounded px-3 py-2">
+          </div>
+        </div>
+
+        <template x-if="availableAtSource !== null">
+          <p class="text-sm mt-2"
+             :class="tForm.quantity > availableAtSource ? 'text-red-600' : 'text-gray-500'">
+            Disponible en origen: <span class="font-medium" x-text="availableAtSource"></span>
+            <span x-show="tForm.quantity > availableAtSource"> — cantidad insuficiente</span>
+          </p>
+        </template>
+
+        <button @click="submitTransfer()" :disabled="busy || !canTransfer"
+                class="mt-4 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          <span x-text="busy ? 'Transfiriendo…' : 'Transferir'"></span>
+        </button>
+      </section>
+    </div>
+  </template>
+
+  <!-- ===== MOVEMENTS ===== -->
+  <template x-if="tab === 'movements'">
+    <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 font-semibold">
+        Movimientos recientes
+      </div>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-left text-gray-600">
+          <tr>
+            <th class="px-4 py-2">Fecha</th>
+            <th class="px-4 py-2">Producto</th>
+            <th class="px-4 py-2">Tipo</th>
+            <th class="px-4 py-2">Desde</th>
+            <th class="px-4 py-2">Hacia</th>
+            <th class="px-4 py-2 text-right">Cantidad</th>
+            <th class="px-4 py-2">Motivo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="m in movements" :key="m.id">
+            <tr class="border-t border-gray-100 hover:bg-gray-50">
+              <td class="px-4 py-2 text-xs text-gray-500" x-text="(m.created_at || '').slice(0,16)"></td>
+              <td class="px-4 py-2" x-text="m.producto_nombre || m.producto_id"></td>
+              <td class="px-4 py-2">
+                <span class="text-xs px-2 py-0.5 rounded" :class="typeBadge(m.type)"
+                      x-text="typeLabel(m.type)"></span>
+              </td>
+              <td class="px-4 py-2 text-gray-600" x-text="m.from_warehouse_name || m.from_warehouse_id || '—'"></td>
+              <td class="px-4 py-2 text-gray-600" x-text="m.to_warehouse_name || m.to_warehouse_id || '—'"></td>
+              <td class="px-4 py-2 text-right font-medium" x-text="m.quantity"></td>
+              <td class="px-4 py-2 text-xs text-gray-500" x-text="m.reason || '—'"></td>
+            </tr>
+          </template>
+          <template x-if="!movements.length">
+            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Sin movimientos</td></tr>
+          </template>
+        </tbody>
+      </table>
+    </section>
+  </template>
+
+  <!-- ===== WAREHOUSES ===== -->
+  <template x-if="tab === 'warehouses'">
+    <div>
+      <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 class="font-semibold mb-4">Nuevo almacén</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input x-model="wForm.name" placeholder="Nombre *"
+                 class="border border-gray-300 rounded px-3 py-2">
+          <input x-model="wForm.code" placeholder="Código"
+                 class="border border-gray-300 rounded px-3 py-2 uppercase">
+          <input x-model="wForm.address" placeholder="Dirección"
+                 class="border border-gray-300 rounded px-3 py-2">
+        </div>
+        <button @click="createWarehouse()" :disabled="busy || !wForm.name"
+                class="mt-3 bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+          Crear almacén
+        </button>
+      </section>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-4 py-2">Nombre</th>
+              <th class="px-4 py-2">Código</th>
+              <th class="px-4 py-2 text-right">Productos</th>
+              <th class="px-4 py-2 text-right">Unidades</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="w in warehouses" :key="w.id">
+              <tr class="border-t border-gray-100 hover:bg-gray-50">
+                <td class="px-4 py-2 font-medium" x-text="w.name"></td>
+                <td class="px-4 py-2 font-mono text-xs" x-text="w.code || '—'"></td>
+                <td class="px-4 py-2 text-right" x-text="linesIn(w.id)"></td>
+                <td class="px-4 py-2 text-right" x-text="unitsIn(w.id)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+</div>
+
+<script>
+function inventario() {
+  return {
+    tab: 'stock',
+    tabs: [
+      { id: 'stock', label: 'Existencias' },
+      { id: 'transfer', label: 'Transferencias' },
+      { id: 'movements', label: 'Movimientos' },
+      { id: 'warehouses', label: 'Almacenes' },
+    ],
+    stock: [], warehouses: [], productos: [], movements: [], alerts: [],
+    whFilter: '',
+    adjustFor: null, adjForm: { new_quantity: null, reason: '' },
+    tForm: { producto_id: '', from_warehouse_id: '', to_warehouse_id: '', quantity: null },
+    wForm: { name: '', code: '', address: '' },
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    typeLabels: {
+      transfer: 'Transferencia', adjustment: 'Ajuste',
+      sale: 'Venta', purchase: 'Compra',
+    },
+    typeLabel(t) { return this.typeLabels[t] || t || '—' },
+    typeBadge(t) {
+      return {
+        transfer: 'bg-blue-50 text-brand',
+        adjustment: 'bg-gray-100 text-gray-700',
+        sale: 'bg-amber-50 text-warn',
+        purchase: 'bg-green-50 text-ok',
+      }[t] || 'bg-gray-100 text-gray-600';
+    },
+
+    get filteredStock() {
+      if (!this.whFilter) return this.stock;
+      return this.stock.filter(s => String(s.warehouse_id) === String(this.whFilter));
+    },
+
+    get totalUnits() {
+      return this.stock.reduce((a, s) => a + Number(s.quantity || 0), 0)
+        .toLocaleString('es-MX');
+    },
+
+    get availableAtSource() {
+      if (!this.tForm.producto_id || !this.tForm.from_warehouse_id) return null;
+      const row = this.stock.find(s =>
+        String(s.producto_id) === String(this.tForm.producto_id) &&
+        String(s.warehouse_id) === String(this.tForm.from_warehouse_id));
+      return row ? Number(row.quantity) : 0;
+    },
+
+    get canTransfer() {
+      const f = this.tForm;
+      return f.producto_id && f.from_warehouse_id && f.to_warehouse_id &&
+             f.from_warehouse_id !== f.to_warehouse_id &&
+             f.quantity > 0 &&
+             (this.availableAtSource === null || f.quantity <= this.availableAtSource);
+    },
+
+    linesIn(id) {
+      return this.stock.filter(s => String(s.warehouse_id) === String(id)).length;
+    },
+    unitsIn(id) {
+      return this.stock.filter(s => String(s.warehouse_id) === String(id))
+        .reduce((a, s) => a + Number(s.quantity || 0), 0);
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadStock(), this.loadWarehouses(),
+        this.loadProductos(), this.loadMovements(), this.loadAlerts(),
+      ]);
+    },
+
+    async loadStock() {
+      try { this.stock = await this.api('GET', '/api/inventory/stock') || [] }
+      catch (e) { this.notify('Error al cargar stock: ' + e.message, 'error') }
+    },
+    async loadWarehouses() {
+      try { this.warehouses = await this.api('GET', '/api/inventory/warehouses') || [] }
+      catch (e) {}
+    },
+    async loadProductos() {
+      try { this.productos = await this.api('GET', '/api/productos') || [] } catch (e) {}
+    },
+    async loadMovements() {
+      try {
+        const m = await this.api('GET', '/api/inventory/stock/movements');
+        this.movements = Array.isArray(m) ? m : (m.movements || []);
+      } catch (e) {}
+    },
+    async loadAlerts() {
+      try {
+        const a = await this.api('GET', '/api/inventory/stock/alerts');
+        this.alerts = Array.isArray(a) ? a : (a.alerts || []);
+      } catch (e) {}
+    },
+
+    openAdjust(s) {
+      this.adjustFor = s;
+      this.adjForm = { new_quantity: Number(s.quantity || 0), reason: '' };
+    },
+
+    async submitAdjust() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/inventory/stock/adjust', {
+          product_id: this.adjustFor.producto_id,
+          warehouse_id: this.adjustFor.warehouse_id,
+          new_quantity: Number(this.adjForm.new_quantity),
+          reason: this.adjForm.reason || 'Ajuste manual',
+        });
+        this.notify(`Ajuste aplicado · nueva cantidad ${r.new_quantity ?? this.adjForm.new_quantity}`);
+        this.adjustFor = null;
+        await Promise.all([this.loadStock(), this.loadMovements(), this.loadAlerts()]);
+      } catch (e) {
+        this.notify('Error al ajustar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async submitTransfer() {
+      if (!this.canTransfer) return;
+      this.busy = true;
+      try {
+        // API contract: stock.transfer expects product_id / from_warehouse / to_warehouse
+        const r = await this.api('POST', '/api/inventory/stock/transfer', {
+          product_id: Number(this.tForm.producto_id),
+          from_warehouse: Number(this.tForm.from_warehouse_id),
+          to_warehouse: Number(this.tForm.to_warehouse_id),
+          quantity: Number(this.tForm.quantity),
+        });
+        this.notify(`Transferencia realizada: ${this.tForm.quantity} unidades`);
+        this.tForm = { producto_id: '', from_warehouse_id: '', to_warehouse_id: '', quantity: null };
+        await Promise.all([this.loadStock(), this.loadMovements()]);
+      } catch (e) {
+        this.notify('Error en la transferencia: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createWarehouse() {
+      if (!this.wForm.name) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/inventory/warehouses', {
+          name: this.wForm.name,
+          code: (this.wForm.code || '').toUpperCase() || undefined,
+          address: this.wForm.address || undefined,
+        });
+        this.notify(`Almacén creado: ${r.name || this.wForm.name}`);
+        this.wForm = { name: '', code: '', address: '' };
+        await this.loadWarehouses();
+      } catch (e) {
+        this.notify('Error al crear almacén: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>

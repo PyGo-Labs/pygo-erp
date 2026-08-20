@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ventas — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A' } } } }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<nav class="bg-dark text-white px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-4">
+    <a href="/" class="text-lg font-bold">PyGo ERP</a>
+    <a href="/ventas" class="text-warn font-medium">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/productos" class="hover:text-warn">Productos</a>
+    <a href="/clientes" class="hover:text-warn">Clientes</a>
+  </div>
+  <a href="/setup" class="text-sm opacity-75 hover:opacity-100">Configuración</a>
+</nav>
+
+<div x-data="ventas()" x-init="init()" class="max-w-7xl mx-auto px-6 py-6">
+
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold">Ventas</h1>
+    <button @click="showNew = !showNew"
+            class="bg-brand text-white px-4 py-2 rounded font-medium hover:opacity-90">
+      <span x-text="showNew ? 'Cerrar' : '+ Nueva orden'"></span>
+    </button>
+  </div>
+
+  <template x-if="msg">
+    <div class="mb-4 px-4 py-3 rounded border"
+         :class="msgType === 'error' ? 'bg-red-50 border-red-200 text-red-800'
+                                     : 'bg-green-50 border-green-200 text-green-800'">
+      <span x-text="msg"></span>
+    </div>
+  </template>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <template x-for="k in kpis" :key="k.label">
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs uppercase tracking-wide text-gray-500" x-text="k.label"></div>
+        <div class="text-2xl font-bold mt-1" :class="k.color" x-text="k.value"></div>
+      </div>
+    </template>
+  </div>
+
+  <!-- New order form -->
+  <template x-if="showNew">
+    <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4">Nueva orden de venta</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Cliente *</label>
+          <select x-model="form.cliente_id"
+                  class="w-full border border-gray-300 rounded px-3 py-2">
+            <option value="">Selecciona…</option>
+            <template x-for="c in clientes" :key="c.id">
+              <option :value="c.id" x-text="c.nombre"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Grupo de impuestos</label>
+          <select x-model="form.tax_group_id"
+                  class="w-full border border-gray-300 rounded px-3 py-2">
+            <option value="">Sin impuestos</option>
+            <template x-for="g in taxGroups" :key="g.id">
+              <option :value="g.id" x-text="g.name"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Término de pago</label>
+          <select x-model="form.payment_term_id"
+                  class="w-full border border-gray-300 rounded px-3 py-2">
+            <option value="">Inmediato</option>
+            <template x-for="t in paymentTerms" :key="t.id">
+              <option :value="t.id" x-text="t.name"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+
+      <!-- Lines -->
+      <div class="border border-gray-200 rounded mb-4">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left">
+            <tr>
+              <th class="px-3 py-2">Producto</th>
+              <th class="px-3 py-2 w-24">Cantidad</th>
+              <th class="px-3 py-2 w-32">Precio</th>
+              <th class="px-3 py-2 w-32 text-right">Subtotal</th>
+              <th class="px-3 py-2 w-12"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(l, i) in form.lines" :key="i">
+              <tr class="border-t border-gray-100">
+                <td class="px-3 py-2">
+                  <select x-model="l.producto_id" @change="fillPrice(i)"
+                          class="w-full border border-gray-300 rounded px-2 py-1">
+                    <option value="">Selecciona…</option>
+                    <template x-for="p in productos" :key="p.id">
+                      <option :value="p.id" x-text="p.codigo + ' · ' + p.nombre"></option>
+                    </template>
+                  </select>
+                </td>
+                <td class="px-3 py-2">
+                  <input type="number" min="1" step="1" x-model.number="l.quantity"
+                         class="w-full border border-gray-300 rounded px-2 py-1">
+                </td>
+                <td class="px-3 py-2">
+                  <input type="number" min="0" step="0.01" x-model.number="l.price"
+                         class="w-full border border-gray-300 rounded px-2 py-1">
+                </td>
+                <td class="px-3 py-2 text-right font-medium"
+                    x-text="money((l.quantity || 0) * (l.price || 0))"></td>
+                <td class="px-3 py-2 text-center">
+                  <button @click="form.lines.splice(i, 1)"
+                          class="text-red-500 hover:text-red-700" x-show="form.lines.length > 1">×</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex justify-between items-start">
+        <button @click="form.lines.push({producto_id:'', quantity:1, price:0})"
+                class="text-sm text-brand hover:underline">+ Agregar línea</button>
+
+        <div class="text-right text-sm space-y-1 min-w-[220px]">
+          <div class="flex justify-between">
+            <span class="text-gray-500">Subtotal</span>
+            <span class="font-medium" x-text="money(subtotal)"></span>
+          </div>
+          <div class="flex justify-between" x-show="taxPreview.total_taxes">
+            <span class="text-gray-500">Impuestos</span>
+            <span class="font-medium" x-text="money(taxPreview.total_taxes)"></span>
+          </div>
+          <div class="flex justify-between" x-show="taxPreview.total_withheld">
+            <span class="text-gray-500">Retenciones</span>
+            <span class="font-medium text-warn" x-text="'-' + money(taxPreview.total_withheld)"></span>
+          </div>
+          <div class="flex justify-between text-base border-t pt-1">
+            <span class="font-semibold">Total</span>
+            <span class="font-bold" x-text="money(total)"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-4">
+        <button @click="previewTax()" :disabled="busy || !subtotal"
+                class="border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-40">
+          Calcular impuestos
+        </button>
+        <button @click="createOrder()" :disabled="busy || !canSubmit"
+                class="bg-brand text-white px-5 py-2 rounded font-medium disabled:opacity-40 hover:opacity-90">
+          <span x-text="busy ? 'Guardando…' : 'Crear orden'"></span>
+        </button>
+      </div>
+    </section>
+  </template>
+  <!-- Orders table -->
+  <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+    <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+      <h2 class="font-semibold">Órdenes de venta</h2>
+      <div class="flex gap-2">
+        <template x-for="f in ['todas','draft','confirmed','delivered','invoiced','cancelled']" :key="f">
+          <button @click="filter = f"
+                  class="text-xs px-2.5 py-1 rounded border"
+                  :class="filter === f ? 'bg-brand text-white border-brand'
+                                       : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
+                  x-text="statusLabel(f)"></button>
+        </template>
+      </div>
+    </div>
+
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-left text-gray-600">
+        <tr>
+          <th class="px-4 py-2">Folio</th>
+          <th class="px-4 py-2">Cliente</th>
+          <th class="px-4 py-2">Fecha</th>
+          <th class="px-4 py-2 text-right">Total</th>
+          <th class="px-4 py-2">Estado</th>
+          <th class="px-4 py-2">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="o in filteredOrders" :key="o.id">
+          <tr class="border-t border-gray-100 hover:bg-gray-50">
+            <td class="px-4 py-2 font-mono text-xs" x-text="o.folio || ('#' + o.id)"></td>
+            <td class="px-4 py-2" x-text="o.cliente_nombre || o.cliente_id || '—'"></td>
+            <td class="px-4 py-2 text-gray-500 text-xs" x-text="(o.created_at || '').slice(0,10)"></td>
+            <td class="px-4 py-2 text-right font-medium" x-text="money(o.total)"></td>
+            <td class="px-4 py-2">
+              <span class="text-xs px-2 py-0.5 rounded font-medium"
+                    :class="badge(o.status)" x-text="statusLabel(o.status)"></span>
+            </td>
+            <td class="px-4 py-2">
+              <div class="flex gap-1.5">
+                <button x-show="o.status === 'draft'" @click="act(o.id, 'confirm')"
+                        class="text-xs px-2 py-1 rounded bg-brand text-white hover:opacity-90">
+                  Confirmar
+                </button>
+                <button x-show="o.status === 'confirmed'" @click="act(o.id, 'deliver')"
+                        class="text-xs px-2 py-1 rounded bg-warn text-white hover:opacity-90">
+                  Entregar
+                </button>
+                <button x-show="o.status === 'delivered'" @click="act(o.id, 'invoice')"
+                        class="text-xs px-2 py-1 rounded bg-ok text-white hover:opacity-90">
+                  Facturar
+                </button>
+                <button x-show="!['cancelled','invoiced'].includes(o.status)"
+                        @click="act(o.id, 'cancel')"
+                        class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">
+                  Cancelar
+                </button>
+                <button @click="toggleDetail(o.id)"
+                        class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100"
+                        x-text="openDetail === o.id ? 'Ocultar' : 'Ver'"></button>
+              </div>
+            </td>
+          </tr>
+        </template>
+
+        <template x-if="!filteredOrders.length">
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">
+            Sin órdenes en este filtro
+          </td></tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Order detail -->
+  <template x-if="openDetail && detail">
+    <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+      <h2 class="font-semibold mb-3">
+        Detalle · <span class="font-mono text-sm" x-text="detail.folio || ('#' + detail.id)"></span>
+      </h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+        <div><span class="text-gray-500 block text-xs">Cliente</span>
+             <span x-text="detail.cliente_nombre || detail.cliente_id || '—'"></span></div>
+        <div><span class="text-gray-500 block text-xs">Estado</span>
+             <span x-text="statusLabel(detail.status)"></span></div>
+        <div><span class="text-gray-500 block text-xs">Total</span>
+             <span class="font-semibold" x-text="money(detail.total)"></span></div>
+        <div><span class="text-gray-500 block text-xs">Creada</span>
+             <span x-text="(detail.created_at || '').slice(0,16)"></span></div>
+      </div>
+
+      <template x-if="detail.lines && detail.lines.length">
+        <table class="w-full text-sm border border-gray-200 rounded">
+          <thead class="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th class="px-3 py-2">Producto</th>
+              <th class="px-3 py-2 text-right">Cant.</th>
+              <th class="px-3 py-2 text-right">Precio</th>
+              <th class="px-3 py-2 text-right">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="l in detail.lines" :key="l.id">
+              <tr class="border-t border-gray-100">
+                <td class="px-3 py-2" x-text="l.producto_nombre || l.producto_id"></td>
+                <td class="px-3 py-2 text-right" x-text="l.quantity"></td>
+                <td class="px-3 py-2 text-right" x-text="money(l.price)"></td>
+                <td class="px-3 py-2 text-right font-medium"
+                    x-text="money((l.quantity || 0) * (l.price || 0))"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </template>
+
+      <div class="mt-4 flex gap-2">
+        <a :href="'/api/reports/pdf/quote?quote_id=' + detail.id + '&token=' + token"
+           target="_blank"
+           class="text-xs px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50">
+          PDF cotización
+        </a>
+      </div>
+    </section>
+  </template>
+
+  <!-- Invoices -->
+  <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200">
+      <h2 class="font-semibold">Facturas</h2>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-left text-gray-600">
+        <tr>
+          <th class="px-4 py-2">Folio</th>
+          <th class="px-4 py-2 text-right">Total</th>
+          <th class="px-4 py-2 text-right">Pagado</th>
+          <th class="px-4 py-2 text-right">Saldo</th>
+          <th class="px-4 py-2">Pago</th>
+          <th class="px-4 py-2">PDF</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="f in facturas" :key="f.id">
+          <tr class="border-t border-gray-100 hover:bg-gray-50">
+            <td class="px-4 py-2 font-mono text-xs" x-text="f.folio || ('#' + f.id)"></td>
+            <td class="px-4 py-2 text-right" x-text="money(f.total)"></td>
+            <td class="px-4 py-2 text-right text-gray-600" x-text="money(f.amount_paid || 0)"></td>
+            <td class="px-4 py-2 text-right font-medium"
+                x-text="money((f.total || 0) - (f.amount_paid || 0))"></td>
+            <td class="px-4 py-2">
+              <span class="text-xs px-2 py-0.5 rounded font-medium"
+                    :class="badge(f.payment_status || 'unpaid')"
+                    x-text="statusLabel(f.payment_status || 'unpaid')"></span>
+            </td>
+            <td class="px-4 py-2">
+              <a :href="'/api/reports/pdf/invoice?invoice_id=' + f.id + '&token=' + token"
+                 target="_blank" class="text-xs text-brand hover:underline">Descargar</a>
+            </td>
+          </tr>
+        </template>
+        <template x-if="!facturas.length">
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Sin facturas</td></tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+</div>
+<script>
+function ventas() {
+  return {
+    orders: [], facturas: [], clientes: [], productos: [],
+    taxGroups: [], paymentTerms: [], taxPreview: {},
+    form: { cliente_id: '', tax_group_id: '', payment_term_id: '',
+            lines: [{ producto_id: '', quantity: 1, price: 0 }] },
+    showNew: false, filter: 'todas', openDetail: null, detail: null,
+    busy: false, msg: '', msgType: 'ok',
+    token: localStorage.getItem('pygo_token') || '',
+
+    statusLabels: {
+      todas: 'Todas', draft: 'Borrador', confirmed: 'Confirmada',
+      delivered: 'Entregada', invoiced: 'Facturada', cancelled: 'Cancelada',
+      unpaid: 'Sin pagar', partial: 'Parcial', paid: 'Pagada',
+    },
+
+    statusLabel(s) { return this.statusLabels[s] || s || '—' },
+
+    badge(s) {
+      return {
+        draft: 'bg-gray-100 text-gray-700',
+        confirmed: 'bg-blue-50 text-brand',
+        delivered: 'bg-amber-50 text-warn',
+        invoiced: 'bg-green-50 text-ok',
+        paid: 'bg-green-50 text-ok',
+        partial: 'bg-amber-50 text-warn',
+        unpaid: 'bg-gray-100 text-gray-600',
+        cancelled: 'bg-red-50 text-red-700',
+      }[s] || 'bg-gray-100 text-gray-600';
+    },
+
+    money(v) {
+      const n = Number(v || 0);
+      return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    get subtotal() {
+      return this.form.lines.reduce((s, l) => s + (l.quantity || 0) * (l.price || 0), 0);
+    },
+
+    get total() {
+      if (this.taxPreview.total !== undefined) return this.taxPreview.total;
+      return this.subtotal;
+    },
+
+    get canSubmit() {
+      return this.form.cliente_id &&
+             this.form.lines.some(l => l.producto_id && l.quantity > 0);
+    },
+
+    get filteredOrders() {
+      if (this.filter === 'todas') return this.orders;
+      return this.orders.filter(o => o.status === this.filter);
+    },
+
+    get kpis() {
+      const sum = s => this.orders.filter(o => o.status === s)
+                        .reduce((a, o) => a + Number(o.total || 0), 0);
+      const pendingInvoices = this.facturas
+        .filter(f => (f.payment_status || 'unpaid') !== 'paid')
+        .reduce((a, f) => a + (Number(f.total || 0) - Number(f.amount_paid || 0)), 0);
+      return [
+        { label: 'Órdenes', value: this.orders.length, color: 'text-dark' },
+        { label: 'Por confirmar', value: this.money(sum('draft')), color: 'text-gray-700' },
+        { label: 'Facturado', value: this.money(sum('invoiced')), color: 'text-ok' },
+        { label: 'Por cobrar', value: this.money(pendingInvoices), color: 'text-warn' },
+      ];
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(m, t = 'ok') {
+      this.msg = m; this.msgType = t;
+      setTimeout(() => { this.msg = '' }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadOrders(), this.loadFacturas(),
+        this.loadRefs(),
+      ]);
+    },
+
+    async loadOrders() {
+      try { this.orders = await this.api('GET', '/api/sales/orders') || [] }
+      catch (e) { this.notify('Error al cargar órdenes: ' + e.message, 'error') }
+    },
+
+    async loadFacturas() {
+      try { this.facturas = await this.api('GET', '/api/facturas') || [] }
+      catch (e) { /* non-blocking */ }
+    },
+
+    async loadRefs() {
+      try { this.clientes = await this.api('GET', '/api/clientes') || [] } catch (e) {}
+      try { this.productos = await this.api('GET', '/api/productos') || [] } catch (e) {}
+      try {
+        const g = await this.api('GET', '/api/tax/groups');
+        this.taxGroups = Array.isArray(g) ? g : (g.groups || []);
+      } catch (e) {}
+      try { this.paymentTerms = await this.api('GET', '/api/payment-terms') || [] } catch (e) {}
+    },
+
+    fillPrice(i) {
+      const p = this.productos.find(x => String(x.id) === String(this.form.lines[i].producto_id));
+      if (p) this.form.lines[i].price = Number(p.precio_unitario || p.precio || 0);
+      this.taxPreview = {};
+    },
+
+    async previewTax() {
+      if (!this.subtotal) return;
+      this.busy = true;
+      try {
+        const body = { lines: [{ amount: this.subtotal, quantity: 1 }] };
+        if (this.form.tax_group_id) body.lines[0].tax_group_id = Number(this.form.tax_group_id);
+        this.taxPreview = await this.api('POST', '/api/tax/compute-document', body);
+        this.notify(`Impuestos: ${this.money(this.taxPreview.total_taxes)}` +
+          (this.taxPreview.total_withheld
+            ? ` · Retenciones: ${this.money(this.taxPreview.total_withheld)}` : ''));
+      } catch (e) {
+        this.notify('Error al calcular impuestos: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async createOrder() {
+      if (!this.canSubmit) return;
+      this.busy = true;
+      try {
+        const items = this.form.lines
+          .filter(l => l.producto_id && l.quantity > 0)
+          .map(l => ({ producto_id: Number(l.producto_id),
+                       quantity: Number(l.quantity),
+                       price: Number(l.price) }));
+        // API contract: sales.orders.create expects `items`, not `lines`
+        const body = { cliente_id: Number(this.form.cliente_id), items };
+        if (this.form.payment_term_id) body.payment_term_id = Number(this.form.payment_term_id);
+        const r = await this.api('POST', '/api/sales/orders', body);
+        this.notify(`Orden creada: ${r.folio || '#' + r.id} · total ${this.money(r.total)}`);
+        this.form = { cliente_id: '', tax_group_id: '', payment_term_id: '',
+                      lines: [{ producto_id: '', quantity: 1, price: 0 }] };
+        this.taxPreview = {};
+        this.showNew = false;
+        await this.loadOrders();
+      } catch (e) {
+        this.notify('Error al crear la orden: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async act(id, action) {
+      this.busy = true;
+      try {
+        // The path carries {id}, but the handler expects order_id explicitly
+        const r = await this.api('POST', `/api/sales/orders/${id}/${action}`,
+                                 { order_id: Number(id) });
+        const labels = { confirm: 'confirmada', deliver: 'entregada',
+                         invoice: 'facturada', cancel: 'cancelada' };
+        this.notify(`Orden #${id} ${labels[action] || action}` +
+          (r.invoice_id ? ` · factura ${r.invoice_folio || r.invoice_id}` : ''));
+        await Promise.all([this.loadOrders(), this.loadFacturas()]);
+        if (this.openDetail === id) await this.loadDetail(id);
+      } catch (e) {
+        this.notify(`No se pudo ${action}: ` + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async toggleDetail(id) {
+      if (this.openDetail === id) { this.openDetail = null; this.detail = null; return }
+      this.openDetail = id;
+      await this.loadDetail(id);
+    },
+
+    async loadDetail(id) {
+      try {
+        const all = await this.api('GET', '/api/sales/orders') || [];
+        this.detail = all.find(o => String(o.id) === String(id)) || null;
+      } catch (e) {
+        this.notify('Error al cargar el detalle: ' + e.message, 'error');
+      }
+    },
+  }
+}
+</script>
+</body>
+</html>
