@@ -1148,6 +1148,81 @@ func registerRoutes(app *web.App) {
 	r.Handle("POST", "/api/demo/clear", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.demo.clear", ctx)
 	}, false)
+
+	// --- D1: Inventory valuation ---
+	r.Handle("GET", "/api/valuation/layers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.valuation.layers", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/valuation/layers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.valuation.add_layer", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/valuation/consume", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.valuation.consume", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/valuation/stock-value", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.valuation.stock_value", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/valuation/cogs", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.valuation.cogs", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/valuation/method", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.valuation.set_method", ctx)
+	}, false)
+
+	// --- D1: Fiscal periods ---
+	r.Handle("GET", "/api/periods", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.periods.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/periods", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.periods.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/periods/generate-year", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.periods.generate_year", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/periods/close", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.periods.close", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/periods/reopen", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.periods.reopen", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/periods/check", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.periods.check", ctx)
+	}, false)
+
+	// --- D1: Multicurrency ---
+	r.Handle("GET", "/api/fx/rate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.fx.rate", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/fx/convert", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.fx.convert", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/fx/document-rate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.fx.set_document_rate", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/fx/differences", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.fx.record_difference", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/fx/differences", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.fx.differences", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/fx/exposure", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.fx.exposure", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {

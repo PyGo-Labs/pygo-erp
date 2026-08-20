@@ -161,6 +161,8 @@ def sales_orders_deliver(order_id=None, token=None, **kwargs):
     
     # Reduce stock for each item
     items = db.execute("SELECT * FROM sales_order_items WHERE order_id = ?", (order_id,)).fetchall()
+    total_cogs = 0.0
+    uncosted = 0.0
     for item in items:
         # Find stock for this product (any warehouse)
         stock = db.execute(
@@ -182,11 +184,26 @@ def sales_orders_deliver(order_id=None, token=None, **kwargs):
             (item["producto_id"], stock["warehouse_id"], item["quantity"],
              f"Sales order #{order_id}")
         )
+
+        # Draw down cost layers so COGS reflects what actually left the warehouse
+        try:
+            from core.valuation import consume_layers
+            costing = consume_layers(
+                db, item["producto_id"], stock["warehouse_id"], item["quantity"],
+                source_type="sales_order", source_id=order_id)
+            total_cogs += float(costing["total_cost"])
+            uncosted += float(costing.get("uncosted_quantity") or 0)
+        except Exception:
+            pass  # valuation must never block a delivery
     
     db.execute("UPDATE sales_orders SET status = 'delivered' WHERE id = ?", (order_id,))
     db.commit()
     
-    return {"delivered": True, "order_id": order_id}
+    result = {"delivered": True, "order_id": order_id, "cogs": round(total_cogs, 2)}
+    if uncosted:
+        result["uncosted_quantity"] = round(uncosted, 6)
+        result["note"] = "some quantity had no cost layer and used productos.cost"
+    return result
 
 
 @register("core.sales.orders.invoice")

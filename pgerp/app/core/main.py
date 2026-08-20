@@ -140,6 +140,13 @@ from core import audit_attachments
 from core import system_demo
 from core.migrations import setup_audit as _mig_setup_audit  # noqa: F401
 
+# --- D1: valuation, multicurrency, period locking ---
+from core import valuation  # noqa: F401
+from core import valuation_handlers  # noqa: F401
+from core import fiscal_periods  # noqa: F401
+from core import multicurrency  # noqa: F401
+from core.migrations import valuation as _mig_valuation  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:

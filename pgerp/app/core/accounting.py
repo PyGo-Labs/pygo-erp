@@ -190,6 +190,17 @@ def journal_create(description=None, lines=None, date=None, token=None, **kwargs
         return {"error": f"unbalanced: debit {debit_total} != credit {credit_total}"}
     
     entry_date = date or datetime.utcnow().isoformat()[:10]
+
+    # A closed fiscal period must refuse new postings. Without this guard
+    # "closed" was only a label.
+    try:
+        from core.fiscal_periods import assert_period_open
+        blocked = assert_period_open(db, entry_date)
+    except Exception:
+        blocked = None
+    if blocked:
+        db.close()
+        return blocked
     
     cursor = db.execute(
         """INSERT INTO journal_entries (date, description, debit_total, credit_total, user_id, created_at)
@@ -288,10 +299,26 @@ def income_statement(**kwargs):
         WHERE a.type = 'expense'
     """).fetchone()["total"]
     
+    # Real cost of goods sold, taken from the valuation layers that were
+    # actually consumed. Before this the statement ignored inventory cost.
+    cogs = 0.0
+    try:
+        row = db.execute(
+            "SELECT COALESCE(SUM(total_value), 0) AS total "
+            "FROM stock_valuation_entries WHERE movement_type = 'out'").fetchone()
+        cogs = round(float(row["total"] or 0), 2)
+    except Exception:
+        cogs = 0.0
+
+    gross_profit = round(revenue - cogs, 2)
     return {
         "revenue": revenue,
+        "cogs": cogs,
+        "gross_profit": gross_profit,
+        "gross_margin_pct": round(gross_profit / revenue * 100, 2) if revenue else 0.0,
         "expenses": expenses,
-        "net_income": revenue - expenses,
+        "net_income": round(revenue - cogs - expenses, 2),
+        "note": "cogs comes from consumed inventory cost layers",
     }
 
 
@@ -323,8 +350,21 @@ def balance_sheet(**kwargs):
         WHERE a.type = 'equity'
     """).fetchone()["total"]
     
+    # Inventory carried at the value of its remaining cost layers. Reported
+    # separately so the posted asset accounts stay auditable on their own.
+    inventory_value = 0.0
+    try:
+        row = db.execute(
+            "SELECT COALESCE(SUM(remaining * unit_cost), 0) AS total "
+            "FROM stock_layers WHERE remaining > 0").fetchone()
+        inventory_value = round(float(row["total"] or 0), 2)
+    except Exception:
+        inventory_value = 0.0
+
     return {
         "assets": assets,
+        "inventory_value": inventory_value,
+        "assets_including_inventory": round(assets + inventory_value, 2),
         "liabilities": liabilities,
         "equity": equity,
         "balanced": abs(assets - liabilities - equity) < 0.01,

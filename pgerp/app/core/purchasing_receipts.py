@@ -181,6 +181,14 @@ def receipts_create(purchase_order_id=None, warehouse_id=None, lines=None, notes
                 (qty, purchase_order_id, pid),
             )
             _add_stock(db, pid, wh, qty, f"purchase receipt {folio or receipt_id}", "purchase")
+            # Every inbound quantity becomes a cost layer at its real purchase
+            # price, so later outbound movements can compute a true COGS.
+            try:
+                from core.valuation import add_layer
+                add_layer(db, pid, wh, qty, price,
+                          source_type="purchase_receipt", source_id=receipt_id)
+            except Exception:
+                pass  # valuation must never block a receipt
             received_total += qty * price
 
         # recompute PO status
