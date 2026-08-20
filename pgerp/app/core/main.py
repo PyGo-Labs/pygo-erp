@@ -133,6 +133,12 @@ from core import tax_engine
 from core.migrations import modules as _mig_modules  # noqa: F401
 from core.migrations import tax_engine as _mig_tax_engine  # noqa: F401
 
+# --- Fase C: setup wizard, audit, attachments, demo ---
+from core import setup_wizard
+from core import audit_attachments
+from core import system_demo
+from core.migrations import setup_audit as _mig_setup_audit  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:

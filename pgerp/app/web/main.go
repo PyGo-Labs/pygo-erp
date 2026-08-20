@@ -1032,6 +1032,86 @@ func registerRoutes(app *web.App) {
 		delete(ctx, "handler")
 		return app.Call(handler, ctx)
 	}, false)
+
+	// --- Fase C: Setup wizard ---
+	r.Handle("GET", "/api/setup/status", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.status", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/setup/countries", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.countries", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/setup/company", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.company", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/setup/localization", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.localization", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/setup/finalize", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.finalize", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/setup/settings", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.settings", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/setup/settings", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.set_setting", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/setup/reset", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.setup.reset", ctx)
+	}, false)
+
+	// --- Fase C: Audit trail ---
+	r.Handle("POST", "/api/audit", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.audit.record", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/audit/history", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.audit.history", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/audit/by-user", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.audit.by_user", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/audit/summary", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.audit.summary", ctx)
+	}, false)
+
+	// --- Fase C: Attachments ---
+	r.Handle("GET", "/api/attachments", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.attachments.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/attachments", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.attachments.attach", ctx)
+	}, false)
+
+	r.Handle("DELETE", "/api/attachments/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.attachments.detach", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/attachments/summary", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.attachments.summary", ctx)
+	}, false)
+
+	// --- Fase C: System readiness & demo data ---
+	r.Handle("GET", "/api/system/readiness", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.system.readiness", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/demo/load", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.demo.load", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/demo/clear", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.demo.clear", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {
