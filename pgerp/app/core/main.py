@@ -24,8 +24,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 DB_PATH = os.environ.get("PYGO_DB", "/tmp/pgerp.db")
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    # timeout: wait instead of failing instantly on a busy lock
+    conn = sqlite3.connect(DB_PATH, timeout=15.0)
     conn.row_factory = sqlite3.Row
+    # WAL allows concurrent readers alongside a writer
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
+        conn.execute("PRAGMA foreign_keys=ON")
+    except Exception:
+        pass
     return conn
 
 # Handlers registry (shared)
@@ -94,6 +102,13 @@ from core import commercial_uom
 from core import commercial_pricing
 from core import commercial_terms
 from core.migrations import commercial  # noqa: F401
+
+# --- Purchasing full (B2) ---
+from core import purchasing_suppliers
+from core import purchasing_rfq
+from core import purchasing_receipts
+from core.migrations import purchasing  # noqa: F401
+from core.migrations import purchasing_fix  # noqa: F401
 
 # --- Models ---
 

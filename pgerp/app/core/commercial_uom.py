@@ -11,8 +11,12 @@ from core.registry import register
 
 def get_db():
     import sqlite3
-    conn = sqlite3.connect(os.environ.get("PYGO_DB", "/tmp/pgerp.db"))
+    conn = sqlite3.connect(os.environ.get("PYGO_DB", "/tmp/pgerp.db"), timeout=15.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA busy_timeout=15000")
+    except Exception:
+        pass
     return conn
 
 

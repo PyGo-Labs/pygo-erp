@@ -615,6 +615,82 @@ func registerRoutes(app *web.App) {
 	r.Handle("POST", "/api/sequences/next", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.sequences.next", ctx)
 	}, false)
+
+	// --- B2: Suppliers ---
+	r.Handle("GET", "/api/suppliers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.suppliers.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/suppliers", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.suppliers.create", ctx)
+	}, false)
+
+	r.Handle("PUT", "/api/suppliers/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.suppliers.update", ctx)
+	}, false)
+
+	r.Handle("DELETE", "/api/suppliers/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.suppliers.delete", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/suppliers/agreements", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.suppliers.agreements.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/suppliers/agreements", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.suppliers.agreements.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/suppliers/best-price", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.suppliers.best_price", ctx)
+	}, false)
+
+	// --- B2: RFQ ---
+	r.Handle("GET", "/api/rfq", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.rfq.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/rfq", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.rfq.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/rfq/{id}/send", func(ctx map[string]interface{}) (interface{}, error) {
+		ctx["rfq_id"] = ctx["id"]
+		return app.Call("core.rfq.send", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/rfq/quotes", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.rfq.quotes.add", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/rfq/compare", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.rfq.compare", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/rfq/award", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.rfq.award", ctx)
+	}, false)
+
+	// --- B2: Receipts & returns ---
+	r.Handle("GET", "/api/purchase/receipts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.purchase.receipts.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/purchase/receipts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.purchase.receipts.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/purchase/receipts/pending", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.purchase.receipts.pending", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/purchase/returns", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.purchase.returns.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/purchase/returns", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.purchase.returns.create", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {
