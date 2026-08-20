@@ -783,6 +783,101 @@ func registerRoutes(app *web.App) {
 	r.Handle("GET", "/api/bank/reconcile/status", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.bank.reconcile.status", ctx)
 	}, false)
+
+	// --- B4: HR org ---
+	r.Handle("GET", "/api/hr/departments", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.departments.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/departments", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.departments.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/hr/positions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.positions.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/positions", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.positions.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/hr/employees", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.employees.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/employees", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.employees.create", ctx)
+	}, false)
+
+	r.Handle("PUT", "/api/hr/employees/{id}", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.employees.update", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/employees/terminate", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.employees.terminate", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/hr/contracts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.contracts.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/contracts", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.contracts.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/hr/headcount", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.headcount", ctx)
+	}, false)
+
+	// --- B4: Leave ---
+	r.Handle("GET", "/api/hr/leave-types", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.leave_types.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/leave-types", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.leave_types.create", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/hr/leave", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.leave.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/leave", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.leave.request", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/leave/approve", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.leave.approve", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/leave/reject", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.leave.reject", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/hr/leave/balance", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.leave.balance", ctx)
+	}, false)
+
+	// --- B4: Expenses ---
+	r.Handle("GET", "/api/hr/expenses", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.expenses.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/expenses", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.expenses.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/expenses/submit", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.expenses.submit", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/expenses/approve", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.expenses.approve", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/hr/expenses/reimburse", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.hr.expenses.reimburse", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {

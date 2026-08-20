@@ -116,6 +116,11 @@ from core import accounting_assets
 from core import accounting_treasury
 from core.migrations import accounting_full  # noqa: F401
 
+# --- HR base (B4) ---
+from core import hr_core
+from core import hr_leave_expenses
+from core.migrations import hr  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:
@@ -404,6 +409,7 @@ def init_db():
         ('core.commercial_terms:payment_terms_seed', 'payment_terms'),
         ('core.commercial_terms:sequences_seed', 'sequences'),
         ('core.accounting_analytic:cost_centers_seed', 'cost_centers'),
+        ('core.hr_leave_expenses:leave_types_seed', 'leave_types'),
     ]:
         mod_name, fn_name = seed_fn.split(':')
         try:
