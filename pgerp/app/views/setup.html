@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuración inicial — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.1"></script>
+  <script src="https://unpkg.com/alpinejs@3.13.0/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A',
+      } } }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900">
+<div id="app" x-data="wizard()" x-init="loadStatus()" class="min-h-screen">
+
+  <nav class="bg-dark text-white px-6 py-4 flex justify-between items-center">
+    <span class="text-xl font-bold">PyGo ERP</span>
+    <span class="text-sm opacity-75">Configuración inicial</span>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-6 py-8">
+
+    <!-- Progress -->
+    <div class="mb-8">
+      <div class="flex justify-between items-end mb-2">
+        <h1 class="text-2xl font-bold">Pongamos tu ERP en marcha</h1>
+        <span class="text-sm text-gray-600">
+          <span x-text="status.completed || 0"></span> de <span x-text="status.total || 6"></span> pasos
+        </span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+        <div class="h-3 rounded-full transition-all duration-500"
+             :class="status.is_ready ? 'bg-ok' : 'bg-brand'"
+             :style="`width: ${status.progress_pct || 0}%`"></div>
+      </div>
+      <p class="text-sm text-gray-500 mt-2">
+        <span x-text="status.progress_pct || 0"></span>% completo
+        <template x-if="status.is_ready">
+          <span class="text-ok font-semibold ml-2">✓ Listo para operar</span>
+        </template>
+      </p>
+    </div>
+
+    <!-- Step checklist -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
+      <template x-for="s in status.steps || []" :key="s.step">
+        <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-100 last:border-0">
+          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                :class="s.status === 'done' ? 'bg-ok' : 'bg-gray-300'"
+                x-text="s.status === 'done' ? '✓' : '·'"></span>
+          <div class="flex-1">
+            <div class="font-medium" x-text="stepLabel(s.step)"></div>
+            <div class="text-xs text-gray-500" x-text="s.description"></div>
+          </div>
+          <span class="text-xs px-2 py-1 rounded"
+                :class="s.status === 'done' ? 'bg-green-50 text-ok' : 'bg-gray-100 text-gray-500'"
+                x-text="s.status === 'done' ? 'listo' : 'pendiente'"></span>
+        </div>
+      </template>
+    </div>
+
+    <!-- Alert -->
+    <template x-if="message">
+      <div class="mb-6 px-4 py-3 rounded border"
+           :class="messageType === 'error'
+             ? 'bg-red-50 border-red-200 text-red-800'
+             : 'bg-green-50 border-green-200 text-green-800'">
+        <span x-text="message"></span>
+      </div>
+    </template>
+    <!-- STEP 1: Company -->
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-1">1 · Datos de tu empresa</h2>
+      <p class="text-sm text-gray-500 mb-4">Identidad fiscal y de contacto.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Nombre comercial *</label>
+          <input x-model="company.name" type="text" placeholder="Ander Labs"
+                 class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Razón social</label>
+          <input x-model="company.legal_name" type="text" placeholder="Ander Labs S.A."
+                 class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Identificación fiscal</label>
+          <input x-model="company.tax_id" type="text" placeholder="RFC / NIT / CIF"
+                 class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Email</label>
+          <input x-model="company.email" type="email" placeholder="hola@empresa.com"
+                 class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Dirección</label>
+          <input x-model="company.address" type="text" placeholder="Calle, ciudad, país"
+                 class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
+        </div>
+      </div>
+
+      <button @click="saveCompany()" :disabled="busy || !company.name"
+              class="mt-4 bg-brand text-white px-5 py-2 rounded font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90">
+        <span x-text="busy ? 'Guardando…' : 'Guardar empresa'"></span>
+      </button>
+    </section>
+
+    <!-- STEP 2: Localization -->
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-1">2 · País y localización</h2>
+      <p class="text-sm text-gray-500 mb-4">
+        Al elegir país se aplican moneda, idioma y zona horaria. Si existe un módulo
+        de localización fiscal, se instala automáticamente.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <template x-for="c in countries" :key="c.country">
+          <button @click="selectedCountry = c.country"
+                  class="text-left border rounded-lg p-3 transition-all"
+                  :class="selectedCountry === c.country
+                    ? 'border-brand ring-2 ring-brand bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-400'">
+            <div class="font-semibold" x-text="c.country"></div>
+            <div class="text-xs text-gray-600" x-text="c.currency + ' · ' + c.language"></div>
+            <div class="text-xs mt-1" x-show="c.localization_module">
+              <span class="px-1.5 py-0.5 rounded text-white text-[10px]"
+                    :class="c.module_state === 'installed' ? 'bg-ok'
+                          : c.module_state === 'not_available' ? 'bg-gray-400' : 'bg-warn'"
+                    x-text="c.module_state === 'installed' ? 'módulo instalado'
+                          : c.module_state === 'not_available' ? 'sin módulo' : 'módulo disponible'"></span>
+            </div>
+          </button>
+        </template>
+      </div>
+
+      <label class="flex items-center gap-2 text-sm mb-4">
+        <input type="checkbox" x-model="installModule" class="rounded border-gray-300">
+        Instalar el módulo de localización fiscal si está disponible
+      </label>
+
+      <button @click="saveLocalization()" :disabled="busy || !selectedCountry"
+              class="bg-brand text-white px-5 py-2 rounded font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90">
+        <span x-text="busy ? 'Aplicando…' : 'Aplicar localización'"></span>
+      </button>
+    </section>
+    <!-- STEP 3: Finalize -->
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-1">3 · Completar configuración</h2>
+      <p class="text-sm text-gray-500 mb-4">
+        Instala plan de cuentas, impuestos, series de numeración y un almacén
+        inicial si aún faltan.
+      </p>
+
+      <label class="flex items-center gap-2 text-sm mb-4">
+        <input type="checkbox" x-model="createWarehouse" class="rounded border-gray-300">
+        Crear almacén principal por defecto
+      </label>
+
+      <button @click="finalize()" :disabled="busy"
+              class="bg-ok text-white px-5 py-2 rounded font-medium disabled:opacity-40 hover:opacity-90">
+        <span x-text="busy ? 'Configurando…' : 'Completar configuración'"></span>
+      </button>
+
+      <template x-if="finalizeActions.length">
+        <ul class="mt-4 text-sm space-y-1">
+          <template x-for="a in finalizeActions" :key="a">
+            <li class="text-gray-700">• <span x-text="a"></span></li>
+          </template>
+        </ul>
+      </template>
+    </section>
+
+    <!-- Readiness -->
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h2 class="text-lg font-semibold mb-1">Estado del sistema</h2>
+          <p class="text-sm text-gray-500">Verificación por área funcional.</p>
+        </div>
+        <button @click="loadReadiness()" :disabled="busy"
+                class="text-sm border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50">
+          Revisar
+        </button>
+      </div>
+
+      <template x-if="readiness.areas">
+        <div>
+          <div class="mb-3 text-sm font-medium"
+               :class="readiness.operational ? 'text-ok' : 'text-warn'"
+               x-text="readiness.operational
+                 ? '✓ Sistema operativo — todas las áreas listas'
+                 : '⚠ Áreas pendientes: ' + (readiness.blocking_areas || []).join(', ')"></div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <template x-for="(data, area) in readiness.areas" :key="area">
+              <div class="border rounded p-3"
+                   :class="data.ready ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'">
+                <div class="text-xs font-semibold uppercase tracking-wide text-gray-600"
+                     x-text="areaLabel(area)"></div>
+                <div class="text-lg font-bold" :class="data.ready ? 'text-ok' : 'text-warn'"
+                     x-text="data.ready ? 'OK' : 'Falta'"></div>
+                <div class="text-[11px] text-gray-500 mt-1" x-text="areaDetail(data)"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- Demo data -->
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-1">Datos de demostración <span class="text-sm font-normal text-gray-400">(opcional)</span></h2>
+      <p class="text-sm text-gray-500 mb-4">
+        Carga clientes, productos, proveedores y stock de ejemplo para explorar el ERP.
+        <span class="text-warn font-medium">Solo para evaluación, no para producción.</span>
+      </p>
+      <div class="flex gap-3">
+        <button @click="loadDemo()" :disabled="busy"
+                class="bg-warn text-white px-4 py-2 rounded font-medium disabled:opacity-40 hover:opacity-90">
+          Cargar datos demo
+        </button>
+        <button @click="clearDemo()" :disabled="busy"
+                class="border border-gray-300 px-4 py-2 rounded hover:bg-gray-50">
+          Limpiar demo
+        </button>
+      </div>
+    </section>
+
+    <!-- Done -->
+    <template x-if="status.is_ready">
+      <div class="bg-dark text-white rounded-lg p-6 text-center">
+        <h2 class="text-xl font-bold mb-2">Tu ERP está listo</h2>
+        <p class="text-sm opacity-80 mb-4">
+          Configuración completa. Ya puedes empezar a operar.
+        </p>
+        <a href="/" class="inline-block bg-ok text-white px-6 py-2.5 rounded font-medium hover:opacity-90">
+          Ir al Dashboard
+        </a>
+      </div>
+    </template>
+
+    <!-- Settings -->
+    <template x-if="Object.keys(settings).length">
+      <section class="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold mb-3">Configuración guardada</h2>
+        <dl class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          <template x-for="(value, key) in settings" :key="key">
+            <div class="flex justify-between border-b border-gray-100 py-1.5">
+              <dt class="text-gray-500" x-text="key"></dt>
+              <dd class="font-medium" x-text="value || '—'"></dd>
+            </div>
+          </template>
+        </dl>
+      </section>
+    </template>
+
+  </main>
+</div>
+<script>
+function wizard() {
+  return {
+    status: {}, countries: [], settings: {}, readiness: {},
+    company: { name: '', legal_name: '', tax_id: '', email: '', address: '' },
+    selectedCountry: '', installModule: true, createWarehouse: true,
+    busy: false, message: '', messageType: 'ok', finalizeActions: [],
+    token: localStorage.getItem('pygo_token') || '',
+
+    labels: {
+      company: 'Datos de la empresa',
+      localization: 'País y localización',
+      chart_of_accounts: 'Plan de cuentas',
+      taxes: 'Impuestos',
+      sequences: 'Series de numeración',
+      warehouse: 'Almacén inicial',
+    },
+    areaLabels: {
+      identity: 'Identidad', accounting: 'Contabilidad', commercial: 'Comercial',
+      inventory: 'Inventario', hr: 'RRHH', manufacturing: 'Producción',
+      extensibility: 'Módulos', governance: 'Gobernanza',
+    },
+
+    stepLabel(s) { return this.labels[s] || s },
+    areaLabel(a) { return this.areaLabels[a] || a },
+    areaDetail(d) {
+      return Object.entries(d)
+        .filter(([k]) => k !== 'ready')
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(' · ');
+    },
+
+    // Every call goes through the same JSON-RPC-ish envelope the API returns:
+    // { result: ..., error: ... }
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${this.token ? sep + 'token=' + encodeURIComponent(this.token) : ''}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json().catch(() => ({}));
+      const payload = json.result !== undefined ? json.result : json;
+      if (json.error) throw new Error(json.error);
+      if (payload && payload.error) throw new Error(payload.error);
+      return payload;
+    },
+
+    notify(msg, type = 'ok') {
+      this.message = msg;
+      this.messageType = type;
+      setTimeout(() => { this.message = '' }, 6000);
+    },
+
+    async loadStatus() {
+      try {
+        this.status = await this.api('GET', '/api/setup/status');
+        const c = await this.api('GET', '/api/setup/countries');
+        this.countries = c.countries || [];
+        await this.loadSettings();
+        await this.loadReadiness();
+      } catch (e) {
+        this.notify('No se pudo cargar el estado: ' + e.message, 'error');
+      }
+    },
+
+    async loadSettings() {
+      try {
+        const s = await this.api('GET', '/api/setup/settings');
+        this.settings = s.settings || {};
+        if (this.settings.country) this.selectedCountry = this.settings.country;
+        if (this.settings.legal_name) this.company.legal_name = this.settings.legal_name;
+        if (this.settings.tax_id) this.company.tax_id = this.settings.tax_id;
+        if (this.settings.email) this.company.email = this.settings.email;
+        if (this.settings.address) this.company.address = this.settings.address;
+      } catch (e) { /* no company yet is a valid state */ }
+    },
+
+    async loadReadiness() {
+      this.busy = true;
+      try {
+        this.readiness = await this.api('GET', '/api/system/readiness');
+      } catch (e) {
+        this.notify('Error al revisar el sistema: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async saveCompany() {
+      if (!this.company.name) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/setup/company', this.company);
+        this.notify(`Empresa guardada: ${r.name}`);
+        await this.loadStatus();
+      } catch (e) {
+        this.notify('Error al guardar la empresa: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async saveLocalization() {
+      if (!this.selectedCountry) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/setup/localization', {
+          country: this.selectedCountry,
+          install_module: this.installModule ? 1 : 0,
+        });
+        let msg = `Localización aplicada: ${r.country} · ${r.currency} · ${r.language}`;
+        const mod = r.localization_module;
+        if (mod) {
+          msg += mod.installed
+            ? ` — módulo ${mod.module} instalado`
+            : ` — módulo ${mod.module} no instalado (${mod.reason || 'ver detalle'})`;
+        }
+        this.notify(msg);
+        await this.loadStatus();
+      } catch (e) {
+        this.notify('Error en localización: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async finalize() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/setup/finalize', {
+          create_warehouse: this.createWarehouse ? 1 : 0,
+        });
+        this.finalizeActions = r.actions || [];
+        this.notify(r.is_ready
+          ? 'Configuración completa — el ERP está listo'
+          : `Progreso ${r.progress_pct}% — siguiente: ${r.next_step}`);
+        await this.loadStatus();
+      } catch (e) {
+        this.notify('Error al completar: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async loadDemo() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/demo/load', { confirm: 'yes' });
+        const created = Object.entries(r.created || {})
+          .map(([k, v]) => `${v} ${k}`).join(', ');
+        this.notify(`Datos demo cargados: ${created || 'sin cambios'}`
+          + (r.partial ? ' (parcial)' : ''));
+        await this.loadReadiness();
+      } catch (e) {
+        this.notify('Error al cargar demo: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+
+    async clearDemo() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/demo/clear', { confirm: 'yes' });
+        const removed = Object.entries(r.removed || {})
+          .map(([k, v]) => `${v} ${k}`).join(', ');
+        this.notify(`Demo limpiado: ${removed || 'nada por limpiar'}`);
+        await this.loadReadiness();
+      } catch (e) {
+        this.notify('Error al limpiar demo: ' + e.message, 'error');
+      } finally { this.busy = false }
+    },
+  }
+}
+</script>
+</body>
+</html>

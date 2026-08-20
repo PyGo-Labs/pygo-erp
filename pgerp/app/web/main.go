@@ -49,9 +49,12 @@ func registerRoutes(app *web.App) {
 		return loadTemplate("app/views/dashboard.html"), nil
 	}, false)
 
-	for _, view := range []string{"/productos", "/clientes", "/facturas", "/login", "/companies", "/users", "/inventory"} {
+	// Each view captures its own path in a closure. Relying on ctx["_path"]
+	// panicked when the framework didn't inject it (nil type assertion).
+	for _, view := range []string{"/productos", "/clientes", "/facturas", "/login", "/companies", "/users", "/inventory", "/setup"} {
+		viewPath := view
 		r.Handle("GET", view, func(ctx map[string]interface{}) (interface{}, error) {
-			return loadTemplate("app/views" + ctx["_path"].(string) + ".html"), nil
+			return loadTemplate("app/views" + viewPath + ".html"), nil
 		}, false)
 	}
 
