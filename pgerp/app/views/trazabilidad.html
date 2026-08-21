@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trazabilidad y Disponibilidad — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A',
+      } } }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 text-dark" x-data="traza()" x-init="init()">
+
+  <nav class="bg-dark text-white px-6 py-3 flex items-center gap-6 text-sm">
+    <a href="/" class="font-semibold">PyGo ERP</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/valuacion" class="hover:text-warn">Valuación</a>
+    <span class="text-warn font-medium">Trazabilidad</span>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-6 py-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">Trazabilidad y disponibilidad</h1>
+      <p class="text-gray-500 text-sm">Lotes y series, reservas de stock,
+        pendientes de entrega y sugerencias de compra</p>
+    </header>
+
+    <!-- KPIs -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Lotes con stock</div>
+        <div class="text-2xl font-bold text-brand" x-text="lotsWithStock"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Caducados</div>
+        <div class="text-2xl font-bold text-red-600" x-text="expiring.expired_count || 0"></div>
+        <div class="text-xs text-gray-400" x-text="`${expiring.expiring_count || 0} por caducar`"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Reservas activas</div>
+        <div class="text-2xl font-bold text-warn" x-text="reservations.length"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Por reabastecer</div>
+        <div class="text-2xl font-bold" :class="(suggestions.count || 0) ? 'text-red-600' : 'text-ok'"
+             x-text="suggestions.count || 0"></div>
+      </div>
+    </section>
+
+    <!-- Alertas de caducidad -->
+    <template x-if="(expiring.expired || []).length">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold text-red-700 text-sm mb-2">Lotes caducados con stock</h3>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="l in expiring.expired" :key="l.id">
+            <span class="bg-white border border-red-300 rounded px-2 py-1 text-xs">
+              <span class="font-mono" x-text="l.lot_code"></span>
+              <span class="text-gray-500" x-text="l.producto_codigo"></span>
+              <span class="text-red-600 font-medium" x-text="`venció ${l.expiry_date}`"></span>
+              <span x-text="`· ${num(l.on_hand)} u`"></span>
+            </span>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+      <template x-for="t in tabs" :key="t.id">
+        <button @click="tab = t.id"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+                :class="tab === t.id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-dark'"
+                x-text="t.label"></button>
+      </template>
+    </div>
+
+    <div x-show="msg" class="mb-4 px-4 py-3 rounded text-sm"
+         :class="msgOk ? 'bg-ok/10 text-ok border border-ok/30' : 'bg-red-50 text-red-700 border border-red-200'"
+         x-text="msg"></div>
+
+    <!-- ===== LOTES ===== -->
+    <template x-if="tab === 'lots'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Activar seguimiento</h2>
+          <p class="text-xs text-gray-500 mb-4">Sin esto no puedes vender productos
+            con caducidad o garantía por unidad. <strong>Lote</strong> agrupa
+            unidades; <strong>serie</strong> identifica una sola.</p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select x-model="trackForm.producto_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Producto *</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="`${p.codigo} — ${p.nombre}`"></option>
+              </template>
+            </select>
+            <select x-model="trackForm.tracking" class="border border-gray-300 rounded px-3 py-2">
+              <option value="none">Sin seguimiento</option>
+              <option value="lot">Por lote</option>
+              <option value="serial">Por número de serie</option>
+            </select>
+            <input x-model.number="trackForm.shelf_life_days" type="number"
+                   placeholder="Vida útil (días)" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="setTracking()" :disabled="busy || !trackForm.producto_id"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Aplicar
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Registrar lote o serie</h2>
+          <p class="text-xs text-gray-500 mb-4">Las series exigen cantidad 1 y no
+            admiten códigos repetidos.</p>
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <select x-model="lotForm.producto_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Producto *</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="p.codigo"></option>
+              </template>
+            </select>
+            <select x-model="lotForm.warehouse_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Almacén *</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+            <input x-model.number="lotForm.quantity" type="number" step="0.01"
+                   placeholder="Cantidad *" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model="lotForm.lot_code" placeholder="Código (auto si vacío)"
+                   class="border border-gray-300 rounded px-3 py-2">
+            <input x-model="lotForm.expiry_date" type="date"
+                   class="border border-gray-300 rounded px-3 py-2">
+            <button @click="receiveLot()"
+                    :disabled="busy || !lotForm.producto_id || !lotForm.warehouse_id || !lotForm.quantity"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Registrar
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+          <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h2 class="font-semibold">Lotes y series</h2>
+              <p class="text-xs text-gray-500">Ordenados por caducidad — así se consumen (FEFO)</p>
+            </div>
+            <label class="text-xs flex items-center gap-2">
+              <input type="checkbox" x-model="onlyAvailable" @change="loadLots()">
+              Solo con stock
+            </label>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Código</th>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-center">Tipo</th>
+                <th class="px-4 py-2 text-left">Caducidad</th>
+                <th class="px-4 py-2 text-left">Almacén</th>
+                <th class="px-4 py-2 text-right">Cantidad</th>
+                <th class="px-4 py-2 text-center">Trazar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="l in lots" :key="`${l.id}-${l.warehouse_id}`">
+                <tr class="border-t border-gray-100" :class="l.is_expired ? 'bg-red-50' : ''">
+                  <td class="px-4 py-2 font-mono text-xs" x-text="l.lot_code"></td>
+                  <td class="px-4 py-2">
+                    <span class="font-mono text-xs" x-text="l.producto_codigo"></span>
+                    <span class="text-gray-500 text-xs" x-text="l.producto_nombre"></span>
+                  </td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium"
+                          :class="l.tracking_type === 'serial' ? 'bg-dark/10 text-dark' : 'bg-brand/10 text-brand'"
+                          x-text="l.tracking_type === 'serial' ? 'Serie' : 'Lote'"></span>
+                  </td>
+                  <td class="px-4 py-2 text-xs">
+                    <span x-text="l.expiry_date || 'sin caducidad'"></span>
+                    <span x-show="l.days_to_expiry !== null && l.days_to_expiry >= 0"
+                          class="text-gray-400" x-text="`(${l.days_to_expiry} d)`"></span>
+                    <span x-show="l.is_expired" class="text-red-600 font-medium">vencido</span>
+                  </td>
+                  <td class="px-4 py-2 text-xs" x-text="l.warehouse_name || '—'"></td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="num(l.quantity)"></td>
+                  <td class="px-4 py-2 text-center">
+                    <button @click="trace(l)" class="text-brand hover:underline text-xs">Ver</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!lots.length">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                  Sin lotes. Activa el seguimiento en un producto y registra uno.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- Trazabilidad -->
+        <template x-if="traceData">
+          <section class="bg-white rounded-lg border border-brand/30 overflow-hidden">
+            <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center bg-brand/5">
+              <div>
+                <h2 class="font-semibold">
+                  Trazabilidad de <span class="font-mono" x-text="traceData.lot.lot_code"></span>
+                </h2>
+                <p class="text-xs text-gray-500">
+                  Recibido <span x-text="num(traceData.total_received)"></span> ·
+                  Emitido <span x-text="num(traceData.total_issued)"></span> ·
+                  En mano <strong x-text="num(traceData.on_hand)"></strong>
+                </p>
+              </div>
+              <button @click="traceData = null" class="text-gray-400 hover:text-dark text-xl">&times;</button>
+            </div>
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600">
+                <tr>
+                  <th class="px-4 py-2 text-left">Fecha</th>
+                  <th class="px-4 py-2 text-center">Dirección</th>
+                  <th class="px-4 py-2 text-right">Cantidad</th>
+                  <th class="px-4 py-2 text-left">Almacén</th>
+                  <th class="px-4 py-2 text-left">Documento origen</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="m in traceData.movements" :key="m.id">
+                  <tr class="border-t border-gray-100">
+                    <td class="px-4 py-2 text-xs text-gray-500" x-text="(m.created_at || '').slice(0,16)"></td>
+                    <td class="px-4 py-2 text-center">
+                      <span class="px-2 py-0.5 rounded text-xs font-medium"
+                            :class="m.direction === 'in' ? 'bg-ok/10 text-ok' : 'bg-warn/10 text-warn'"
+                            x-text="m.direction === 'in' ? 'Entrada' : 'Salida'"></span>
+                    </td>
+                    <td class="px-4 py-2 text-right" x-text="num(m.quantity)"></td>
+                    <td class="px-4 py-2 text-xs" x-text="m.warehouse_name || '—'"></td>
+                    <td class="px-4 py-2 text-xs text-gray-600"
+                        x-text="m.source_type ? `${sourceLabel(m.source_type)} #${m.source_id ?? '—'}` : (m.reason || '—')"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </section>
+        </template>
+      </div>
+    </template>
+    <!-- ===== RESERVAS ===== -->
+    <template x-if="tab === 'reservations'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Consultar disponibilidad</h2>
+          <p class="text-xs text-gray-500 mb-4">Disponible = físico − reservado.
+            Es lo que realmente puedes prometer.</p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select x-model="availForm.producto_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Producto *</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="`${p.codigo} — ${p.nombre}`"></option>
+              </template>
+            </select>
+            <select x-model="availForm.warehouse_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Todos los almacenes</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+            <button @click="checkAvailability()" :disabled="busy || !availForm.producto_id"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Consultar
+            </button>
+          </div>
+          <template x-if="availability">
+            <div class="mt-4 grid grid-cols-3 gap-4">
+              <div class="bg-gray-50 rounded p-3">
+                <div class="text-xs text-gray-500 uppercase">Físico</div>
+                <div class="text-lg font-bold" x-text="num(availability.on_hand)"></div>
+              </div>
+              <div class="bg-warn/10 rounded p-3">
+                <div class="text-xs text-gray-500 uppercase">Reservado</div>
+                <div class="text-lg font-bold text-warn" x-text="num(availability.reserved)"></div>
+              </div>
+              <div class="rounded p-3" :class="availability.available > 0 ? 'bg-ok/10' : 'bg-red-50'">
+                <div class="text-xs text-gray-500 uppercase">Disponible</div>
+                <div class="text-lg font-bold"
+                     :class="availability.available > 0 ? 'text-ok' : 'text-red-600'"
+                     x-text="num(availability.available)"></div>
+              </div>
+            </div>
+          </template>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Reservar stock</h2>
+          <p class="text-xs text-gray-500 mb-4">Se rechaza si excede lo disponible:
+            así dos vendedores no pueden vender las mismas unidades.</p>
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <select x-model="resForm.producto_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Producto *</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="p.codigo"></option>
+              </template>
+            </select>
+            <select x-model="resForm.warehouse_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Almacén *</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+            <input x-model.number="resForm.quantity" type="number" step="0.01"
+                   placeholder="Cantidad *" class="border border-gray-300 rounded px-3 py-2">
+            <select x-model="resForm.document_type" class="border border-gray-300 rounded px-3 py-2">
+              <option value="sales_order">Pedido de venta</option>
+              <option value="production_order">Orden de producción</option>
+              <option value="manual">Manual</option>
+            </select>
+            <input x-model.number="resForm.document_id" type="number"
+                   placeholder="ID documento *" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="reserve()"
+                    :disabled="busy || !resForm.producto_id || !resForm.warehouse_id || !resForm.quantity || !resForm.document_id"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Reservar
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Reservas activas</h2>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Fecha</th>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-left">Almacén</th>
+                <th class="px-4 py-2 text-right">Cantidad</th>
+                <th class="px-4 py-2 text-left">Documento</th>
+                <th class="px-4 py-2 text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in reservations" :key="r.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="(r.reserved_at || '').slice(0,16)"></td>
+                  <td class="px-4 py-2">
+                    <span class="font-mono text-xs" x-text="r.producto_codigo"></span>
+                    <span class="text-gray-500 text-xs" x-text="r.producto_nombre"></span>
+                  </td>
+                  <td class="px-4 py-2 text-xs" x-text="r.warehouse_name || '—'"></td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="num(r.quantity)"></td>
+                  <td class="px-4 py-2 text-xs"
+                      x-text="`${docLabel(r.document_type)} #${r.document_id}`"></td>
+                  <td class="px-4 py-2 text-center">
+                    <button @click="release(r)" class="text-red-600 hover:underline text-xs">Liberar</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!reservations.length">
+                <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                  Sin reservas activas
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+
+    <!-- ===== BACKORDERS ===== -->
+    <template x-if="tab === 'backorders'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+          <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h2 class="font-semibold">Pendientes de entrega</h2>
+              <p class="text-xs text-gray-500">Lo que el cliente pidió y no pudo salir</p>
+            </div>
+            <select x-model="boStatus" @change="loadBackorders()"
+                    class="border border-gray-300 rounded px-3 py-1.5 text-sm">
+              <option value="pending">Pendientes</option>
+              <option value="partial">Parciales</option>
+              <option value="fulfilled">Cumplidos</option>
+              <option value="cancelled">Cancelados</option>
+            </select>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Creado</th>
+                <th class="px-4 py-2 text-left">Documento</th>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-right">Pedido</th>
+                <th class="px-4 py-2 text-right">Pendiente</th>
+                <th class="px-4 py-2 text-left">Esperado</th>
+                <th class="px-4 py-2 text-center">Estado</th>
+                <th class="px-4 py-2 text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="b in backorders" :key="b.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="(b.created_at || '').slice(0,10)"></td>
+                  <td class="px-4 py-2 text-xs"
+                      x-text="`${docLabel(b.document_type)} #${b.document_id}`"></td>
+                  <td class="px-4 py-2">
+                    <span class="font-mono text-xs" x-text="b.producto_codigo"></span>
+                    <span class="text-gray-500 text-xs" x-text="b.producto_nombre"></span>
+                  </td>
+                  <td class="px-4 py-2 text-right text-gray-400" x-text="num(b.quantity_ordered)"></td>
+                  <td class="px-4 py-2 text-right font-medium text-warn" x-text="num(b.quantity_pending)"></td>
+                  <td class="px-4 py-2 text-xs" x-text="b.expected_date || '—'"></td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium"
+                          :class="{
+                            'bg-warn/10 text-warn': b.status === 'pending',
+                            'bg-brand/10 text-brand': b.status === 'partial',
+                            'bg-ok/10 text-ok': b.status === 'fulfilled',
+                            'bg-gray-100 text-gray-500': b.status === 'cancelled'
+                          }" x-text="boLabel(b.status)"></span>
+                  </td>
+                  <td class="px-4 py-2 text-center whitespace-nowrap">
+                    <template x-if="['pending','partial'].includes(b.status)">
+                      <span>
+                        <button @click="openFulfill(b)" class="text-ok hover:underline text-xs">Entregar</button>
+                        <button @click="cancelBo(b)" class="text-red-600 hover:underline text-xs ml-2">Cancelar</button>
+                      </span>
+                    </template>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!backorders.length">
+                <td colspan="8" class="px-4 py-8 text-center text-gray-400">
+                  Sin pendientes en este estado
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <template x-if="fulfillFor">
+          <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+               @click.self="fulfillFor = null">
+            <div class="bg-white rounded-lg max-w-md w-full p-6">
+              <h3 class="font-semibold mb-1">Entregar pendiente</h3>
+              <p class="text-xs text-gray-500 mb-4">
+                <span x-text="fulfillFor.producto_codigo"></span> ·
+                pendiente <strong x-text="num(fulfillFor.quantity_pending)"></strong>
+              </p>
+              <input x-model.number="fulfillQty" type="number" step="0.01"
+                     :max="fulfillFor.quantity_pending"
+                     class="border border-gray-300 rounded px-3 py-2 w-full mb-4"
+                     placeholder="Cantidad a entregar">
+              <div class="flex gap-2 justify-end">
+                <button @click="fulfillFor = null" class="px-4 py-2 text-sm">Cancelar</button>
+                <button @click="fulfillBo()" :disabled="busy || !fulfillQty"
+                        class="bg-brand text-white px-4 py-2 rounded text-sm disabled:opacity-40">
+                  Entregar
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- ===== REORDEN ===== -->
+    <template x-if="tab === 'reorder'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Regla de reabastecimiento</h2>
+          <p class="text-xs text-gray-500 mb-4">Cuando lo disponible baja del mínimo,
+            el sistema sugiere comprar hasta el máximo.</p>
+          <div class="grid grid-cols-1 md:grid-cols-7 gap-3">
+            <select x-model="ruleForm.producto_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Producto *</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="p.codigo"></option>
+              </template>
+            </select>
+            <select x-model="ruleForm.warehouse_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Almacén *</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+            <input x-model.number="ruleForm.min_quantity" type="number" step="0.01"
+                   placeholder="Mínimo *" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="ruleForm.max_quantity" type="number" step="0.01"
+                   placeholder="Máximo" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="ruleForm.multiple_of" type="number" step="0.01"
+                   placeholder="Múltiplos de" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="ruleForm.lead_time_days" type="number"
+                   placeholder="Días entrega" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="saveRule()"
+                    :disabled="busy || !ruleForm.producto_id || !ruleForm.warehouse_id || ruleForm.min_quantity === null"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Guardar
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+          <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h2 class="font-semibold">Sugerencias de compra</h2>
+              <p class="text-xs text-gray-500">La disponibilidad descuenta lo reservado</p>
+            </div>
+            <button x-show="(suggestions.count || 0) > 0" @click="createRfq()" :disabled="busy"
+                    class="bg-ok text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-40">
+              Generar cotización
+            </button>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-left">Almacén</th>
+                <th class="px-4 py-2 text-right">Físico</th>
+                <th class="px-4 py-2 text-right">Reservado</th>
+                <th class="px-4 py-2 text-right">Disponible</th>
+                <th class="px-4 py-2 text-right">Mín / Máx</th>
+                <th class="px-4 py-2 text-right">Sugerido</th>
+                <th class="px-4 py-2 text-left">Proveedor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="s in (suggestions.suggestions || [])" :key="`${s.producto_id}-${s.warehouse_id}`">
+                <tr class="border-t border-gray-100 bg-red-50/40">
+                  <td class="px-4 py-2">
+                    <span class="font-mono text-xs" x-text="s.codigo"></span>
+                    <span class="text-gray-500 text-xs" x-text="s.nombre"></span>
+                  </td>
+                  <td class="px-4 py-2 text-xs" x-text="s.warehouse_name"></td>
+                  <td class="px-4 py-2 text-right" x-text="num(s.on_hand)"></td>
+                  <td class="px-4 py-2 text-right text-warn" x-text="num(s.reserved)"></td>
+                  <td class="px-4 py-2 text-right font-medium text-red-600" x-text="num(s.available)"></td>
+                  <td class="px-4 py-2 text-right text-xs text-gray-500"
+                      x-text="`${num(s.min_quantity)} / ${num(s.max_quantity)}`"></td>
+                  <td class="px-4 py-2 text-right font-bold text-brand" x-text="num(s.suggested_quantity)"></td>
+                  <td class="px-4 py-2 text-xs">
+                    <span x-text="s.supplier_name || '—'"></span>
+                    <span x-show="s.expected_date" class="text-gray-400 block"
+                          x-text="`llega ${s.expected_date}`"></span>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!(suggestions.suggestions || []).length">
+                <td colspan="8" class="px-4 py-8 text-center text-ok">
+                  Todo por encima del mínimo
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Reglas configuradas</h2>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-left">Almacén</th>
+                <th class="px-4 py-2 text-right">Mínimo</th>
+                <th class="px-4 py-2 text-right">Máximo</th>
+                <th class="px-4 py-2 text-right">Múltiplos</th>
+                <th class="px-4 py-2 text-right">Días entrega</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in rules" :key="r.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2">
+                    <span class="font-mono text-xs" x-text="r.producto_codigo"></span>
+                    <span class="text-gray-500 text-xs" x-text="r.producto_nombre"></span>
+                  </td>
+                  <td class="px-4 py-2 text-xs" x-text="r.warehouse_name"></td>
+                  <td class="px-4 py-2 text-right" x-text="num(r.min_quantity)"></td>
+                  <td class="px-4 py-2 text-right" x-text="num(r.max_quantity)"></td>
+                  <td class="px-4 py-2 text-right text-xs" x-text="num(r.multiple_of)"></td>
+                  <td class="px-4 py-2 text-right text-xs" x-text="r.lead_time_days || 0"></td>
+                </tr>
+              </template>
+              <tr x-show="!rules.length">
+                <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                  Sin reglas. Configura mínimos para recibir sugerencias.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+
+  </main>
+<script>
+function traza() {
+  return {
+    tab: 'lots',
+    tabs: [
+      { id: 'lots', label: 'Lotes y series' },
+      { id: 'reservations', label: 'Reservas' },
+      { id: 'backorders', label: 'Pendientes' },
+      { id: 'reorder', label: 'Reabastecimiento' },
+    ],
+    busy: false, msg: '', msgOk: true,
+
+    lots: [], expiring: {}, reservations: [], backorders: [],
+    suggestions: {}, rules: [], productos: [], warehouses: [],
+    onlyAvailable: true, boStatus: 'pending',
+    traceData: null, availability: null,
+    fulfillFor: null, fulfillQty: null,
+
+    trackForm: { producto_id: '', tracking: 'lot', shelf_life_days: null },
+    lotForm: { producto_id: '', warehouse_id: '', quantity: null,
+               lot_code: '', expiry_date: '' },
+    availForm: { producto_id: '', warehouse_id: '' },
+    resForm: { producto_id: '', warehouse_id: '', quantity: null,
+               document_type: 'sales_order', document_id: null },
+    ruleForm: { producto_id: '', warehouse_id: '', min_quantity: null,
+                max_quantity: null, multiple_of: 1, lead_time_days: 0 },
+
+    get lotsWithStock() {
+      return this.lots.filter(l => Number(l.quantity || 0) > 0).length;
+    },
+
+    num(v) {
+      return Number(v || 0).toLocaleString('es-MX', { maximumFractionDigits: 4 });
+    },
+    docLabel(t) {
+      return { sales_order: 'Pedido', production_order: 'Producción',
+               purchase_order: 'Compra', manual: 'Manual' }[t] || t;
+    },
+    boLabel(s) {
+      return { pending: 'Pendiente', partial: 'Parcial',
+               fulfilled: 'Cumplido', cancelled: 'Cancelado' }[s] || s;
+    },
+    sourceLabel(s) {
+      return {
+        purchase_receipt: 'Recepción de compra',
+        sales_order: 'Pedido de venta',
+        sales_return: 'Devolución de cliente',
+        production_order: 'Orden de producción',
+        manual: 'Manual',
+      }[s] || s;
+    },
+
+    token() {
+      const m = document.cookie.match(/token=([^;]+)/);
+      return m ? m[1] : new URLSearchParams(location.search).get('token') || '';
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${sep}token=${encodeURIComponent(this.token())}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const r = json.result;
+      if (r && r.error) throw new Error(r.error);
+      return r;
+    },
+
+    flash(text, ok = true) {
+      this.msg = text; this.msgOk = ok;
+      setTimeout(() => { this.msg = ''; }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadLots(), this.loadExpiring(), this.loadReservations(),
+        this.loadBackorders(), this.loadSuggestions(), this.loadRules(),
+        this.loadProductos(), this.loadWarehouses(),
+      ]);
+    },
+
+    async loadLots() {
+      try {
+        this.lots = await this.api('GET',
+          `/api/lots?only_available=${this.onlyAvailable ? 1 : 0}`) || [];
+      } catch (e) {}
+    },
+    async loadExpiring() {
+      try { this.expiring = await this.api('GET', '/api/lots/expiring?days=30') || {} }
+      catch (e) {}
+    },
+    async loadReservations() {
+      try {
+        this.reservations = await this.api('GET',
+          '/api/reservations?status=active') || [];
+      } catch (e) {}
+    },
+    async loadBackorders() {
+      try {
+        this.backorders = await this.api('GET',
+          `/api/backorders?status=${this.boStatus}`) || [];
+      } catch (e) {}
+    },
+    async loadSuggestions() {
+      try { this.suggestions = await this.api('GET', '/api/reorder/suggestions') || {} }
+      catch (e) {}
+    },
+    async loadRules() {
+      try { this.rules = await this.api('GET', '/api/reorder/rules') || [] }
+      catch (e) {}
+    },
+    async loadProductos() {
+      try {
+        const p = await this.api('GET', '/api/productos');
+        this.productos = Array.isArray(p) ? p : (p.productos || []);
+      } catch (e) {}
+    },
+    async loadWarehouses() {
+      try {
+        const w = await this.api('GET', '/api/inventory/warehouses');
+        this.warehouses = Array.isArray(w) ? w : (w.warehouses || []);
+      } catch (e) {}
+    },
+
+    async setTracking() {
+      this.busy = true;
+      try {
+        const body = { producto_id: Number(this.trackForm.producto_id),
+                       tracking: this.trackForm.tracking };
+        if (this.trackForm.shelf_life_days) {
+          body.shelf_life_days = Number(this.trackForm.shelf_life_days);
+        }
+        const r = await this.api('POST', '/api/lots/tracking', body);
+        this.flash(`Seguimiento: ${r.tracking === 'none' ? 'desactivado' : r.tracking}`);
+        await this.loadProductos();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async receiveLot() {
+      this.busy = true;
+      try {
+        const body = {
+          producto_id: Number(this.lotForm.producto_id),
+          warehouse_id: Number(this.lotForm.warehouse_id),
+          quantity: Number(this.lotForm.quantity),
+        };
+        if (this.lotForm.lot_code) body.lot_code = this.lotForm.lot_code;
+        if (this.lotForm.expiry_date) body.expiry_date = this.lotForm.expiry_date;
+        const r = await this.api('POST', '/api/lots/receive', body);
+        this.flash(`${r.lot_code} registrado: ${this.num(r.quantity)} unidades`);
+        this.lotForm = { producto_id: '', warehouse_id: '', quantity: null,
+                         lot_code: '', expiry_date: '' };
+        await Promise.all([this.loadLots(), this.loadExpiring()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async trace(lot) {
+      this.busy = true;
+      try {
+        this.traceData = await this.api('GET', `/api/lots/trace?lot_id=${lot.id}`);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async checkAvailability() {
+      this.busy = true; this.availability = null;
+      try {
+        const q = new URLSearchParams({ producto_id: this.availForm.producto_id });
+        if (this.availForm.warehouse_id) q.set('warehouse_id', this.availForm.warehouse_id);
+        this.availability = await this.api('GET', `/api/stock/availability?${q}`);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async reserve() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/reservations', {
+          producto_id: Number(this.resForm.producto_id),
+          warehouse_id: Number(this.resForm.warehouse_id),
+          quantity: Number(this.resForm.quantity),
+          document_type: this.resForm.document_type,
+          document_id: Number(this.resForm.document_id),
+        });
+        this.flash(`Reservadas ${this.num(r.quantity)} unidades · quedan ${this.num(r.available_after)} disponibles`);
+        this.resForm.quantity = null;
+        await Promise.all([this.loadReservations(), this.loadSuggestions()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async release(r) {
+      if (!confirm(`Liberar ${this.num(r.quantity)} unidades reservadas?`)) return;
+      this.busy = true;
+      try {
+        const res = await this.api('POST', '/api/reservations/release',
+                                   { reservation_id: r.id });
+        this.flash(`Liberadas ${this.num(res.quantity_released)} unidades`);
+        await Promise.all([this.loadReservations(), this.loadSuggestions()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    openFulfill(b) {
+      this.fulfillFor = b;
+      this.fulfillQty = Number(b.quantity_pending);
+    },
+
+    async fulfillBo() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/backorders/fulfill', {
+          backorder_id: this.fulfillFor.id,
+          quantity: Number(this.fulfillQty),
+        });
+        this.flash(r.status === 'fulfilled'
+          ? 'Pendiente cumplido por completo'
+          : `Entregadas ${this.num(r.delivered)} · quedan ${this.num(r.quantity_pending)}`);
+        this.fulfillFor = null;
+        await this.loadBackorders();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async cancelBo(b) {
+      if (!confirm('Cancelar este pendiente?')) return;
+      this.busy = true;
+      try {
+        await this.api('POST', '/api/backorders/cancel', { backorder_id: b.id });
+        this.flash('Pendiente cancelado');
+        await this.loadBackorders();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async saveRule() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/reorder/rules', {
+          producto_id: Number(this.ruleForm.producto_id),
+          warehouse_id: Number(this.ruleForm.warehouse_id),
+          min_quantity: Number(this.ruleForm.min_quantity),
+          max_quantity: this.ruleForm.max_quantity !== null
+            ? Number(this.ruleForm.max_quantity) : undefined,
+          multiple_of: Number(this.ruleForm.multiple_of || 1),
+          lead_time_days: Number(this.ruleForm.lead_time_days || 0),
+        });
+        this.flash(`Regla ${r.action === 'created' ? 'creada' : 'actualizada'}: mín ${this.num(r.min_quantity)} / máx ${this.num(r.max_quantity)}`);
+        await Promise.all([this.loadRules(), this.loadSuggestions()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async createRfq() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/reorder/create-rfq', {});
+        if (r.created) {
+          this.flash(`Cotización ${r.folio} creada con ${r.lines} línea(s): ${(r.products || []).join(', ')}`);
+        } else {
+          this.flash(r.reason || 'Nada por debajo del mínimo', false);
+        }
+        await this.loadSuggestions();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+  }
+}
+</script>
+</body>
+</html>

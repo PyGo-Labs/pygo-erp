@@ -76,7 +76,7 @@ fi
 
 echo ""
 echo "Fresh-DB scripts (run separately, they assert on specific ids):"
-for script in test_d2 test_d2_integration test_d3; do
+for script in test_d2 test_d2_integration test_d3 test_ui_d test_ui_d_flow; do
   bash scripts/restart_dev.sh --fresh > /dev/null 2>&1
   PYTHONPATH=/home/hermesuser/pygo-framework:$PWD /tmp/pygo-erp > /tmp/verify_srv.log 2>&1 &
   FRESH=$!

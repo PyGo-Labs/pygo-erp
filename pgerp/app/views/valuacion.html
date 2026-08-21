@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valuación y Cierre — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A',
+      } } }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 text-dark" x-data="valuacion()" x-init="init()">
+
+  <nav class="bg-dark text-white px-6 py-3 flex items-center gap-6 text-sm">
+    <a href="/" class="font-semibold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/compras" class="hover:text-warn">Compras</a>
+    <a href="/inventario" class="hover:text-warn">Inventario</a>
+    <a href="/contabilidad" class="hover:text-warn">Contabilidad</a>
+    <span class="text-warn font-medium">Valuación</span>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-6 py-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">Valuación y cierre contable</h1>
+      <p class="text-gray-500 text-sm">Costo real del inventario, cierre de
+        periodos y control de monedas</p>
+    </header>
+
+    <!-- KPIs -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Valor del inventario</div>
+        <div class="text-2xl font-bold text-brand" x-text="money(stockValue.total_value)"></div>
+        <div class="text-xs text-gray-400" x-text="`${num(stockValue.total_quantity)} unidades`"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Costo de ventas</div>
+        <div class="text-2xl font-bold" x-text="money(cogs.total_cogs)"></div>
+        <div class="text-xs text-gray-400"
+             x-text="cogs.returned_cost ? `bruto ${money(cogs.gross_cogs)} · devuelto ${money(cogs.returned_cost)}` : 'neto del periodo'"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Periodos cerrados</div>
+        <div class="text-2xl font-bold text-ok" x-text="closedCount"></div>
+        <div class="text-xs text-gray-400" x-text="`${periods.length} definidos`"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Efecto cambiario neto</div>
+        <div class="text-2xl font-bold"
+             :class="(fx.net_effect || 0) >= 0 ? 'text-ok' : 'text-red-600'"
+             x-text="money(fx.net_effect)"></div>
+        <div class="text-xs text-gray-400" x-text="`base ${exposure.base_currency || '—'}`"></div>
+      </div>
+    </section>
+
+    <!-- Aviso de cantidad sin costear -->
+    <template x-if="cogs.uncosted_quantity > 0">
+      <div class="bg-warn/10 border border-warn/40 rounded-lg p-4 mb-6 text-sm">
+        <strong class="text-warn">Atención:</strong>
+        <span x-text="`${num(cogs.uncosted_quantity)} unidades salieron sin una capa de costo que las cubriera y se valoraron con el costo del producto.`"></span>
+        Agrega capas de apertura para que el costo de ventas sea exacto.
+      </div>
+    </template>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+      <template x-for="t in tabs" :key="t.id">
+        <button @click="tab = t.id"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+                :class="tab === t.id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-dark'"
+                x-text="t.label"></button>
+      </template>
+    </div>
+
+    <div x-show="msg" class="mb-4 px-4 py-3 rounded text-sm"
+         :class="msgOk ? 'bg-ok/10 text-ok border border-ok/30' : 'bg-red-50 text-red-700 border border-red-200'"
+         x-text="msg"></div>
+
+    <!-- ===== VALUACION ===== -->
+    <template x-if="tab === 'layers'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Capa de costo de apertura</h2>
+          <p class="text-xs text-gray-500 mb-4">Usa esto para cargar el
+            inventario inicial con su costo real, o para corregir una capa.</p>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <select x-model="layerForm.producto_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Producto *</option>
+              <template x-for="p in productos" :key="p.id">
+                <option :value="p.id" x-text="`${p.codigo} — ${p.nombre}`"></option>
+              </template>
+            </select>
+            <select x-model="layerForm.warehouse_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Almacén *</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+            <input x-model.number="layerForm.quantity" type="number" step="0.01"
+                   placeholder="Cantidad *" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="layerForm.unit_cost" type="number" step="0.0001"
+                   placeholder="Costo unitario *" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="addLayer()"
+                    :disabled="busy || !layerForm.producto_id || !layerForm.warehouse_id || !layerForm.quantity"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Registrar capa
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+          <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="font-semibold">Valor por producto</h2>
+            <span class="text-sm text-gray-500" x-text="money(stockValue.total_value)"></span>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Código</th>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-center">Método</th>
+                <th class="px-4 py-2 text-right">Cantidad</th>
+                <th class="px-4 py-2 text-right">Costo unit.</th>
+                <th class="px-4 py-2 text-right">Valor</th>
+                <th class="px-4 py-2 text-center">Cambiar método</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in (stockValue.by_product || [])" :key="p.producto_id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 font-mono text-xs" x-text="p.codigo"></td>
+                  <td class="px-4 py-2" x-text="p.nombre"></td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium"
+                          :class="{
+                            'bg-brand/10 text-brand': p.costing_method === 'fifo',
+                            'bg-ok/10 text-ok': p.costing_method === 'average',
+                            'bg-gray-100 text-gray-600': p.costing_method === 'standard'
+                          }" x-text="methodLabel(p.costing_method)"></span>
+                  </td>
+                  <td class="px-4 py-2 text-right" x-text="num(p.quantity)"></td>
+                  <td class="px-4 py-2 text-right" x-text="money(p.unit_cost)"></td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="money(p.value)"></td>
+                  <td class="px-4 py-2 text-center">
+                    <select @change="setMethod(p.producto_id, $event.target.value)"
+                            class="border border-gray-300 rounded px-2 py-1 text-xs">
+                      <option value="">—</option>
+                      <option value="fifo">PEPS (FIFO)</option>
+                      <option value="average">Promedio</option>
+                      <option value="standard">Estándar</option>
+                    </select>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!(stockValue.by_product || []).length">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                  Sin capas de costo. Registra una capa de apertura o recibe una compra.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Capas abiertas</h2>
+            <p class="text-xs text-gray-500">Cada entrada crea una capa; las salidas
+              las consumen en el orden del método elegido.</p>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Fecha</th>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-left">Almacén</th>
+                <th class="px-4 py-2 text-right">Original</th>
+                <th class="px-4 py-2 text-right">Restante</th>
+                <th class="px-4 py-2 text-right">Costo unit.</th>
+                <th class="px-4 py-2 text-left">Origen</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="l in layers" :key="l.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="(l.layer_date || '').slice(0,16)"></td>
+                  <td class="px-4 py-2">
+                    <span class="font-mono text-xs" x-text="l.producto_codigo"></span>
+                    <span class="text-gray-500" x-text="l.producto_nombre"></span>
+                  </td>
+                  <td class="px-4 py-2" x-text="l.warehouse_name || '—'"></td>
+                  <td class="px-4 py-2 text-right text-gray-400" x-text="num(l.quantity)"></td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="num(l.remaining)"></td>
+                  <td class="px-4 py-2 text-right" x-text="money(l.unit_cost)"></td>
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="sourceLabel(l.source_type)"></td>
+                </tr>
+              </template>
+              <tr x-show="!layers.length">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">Sin capas abiertas</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+    <!-- ===== COGS ===== -->
+    <template x-if="tab === 'cogs'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-4">Costo de ventas del periodo</h2>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input x-model="cogsFrom" type="date" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model="cogsTo" type="date" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="loadCogs()" :disabled="busy"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Calcular
+            </button>
+            <button @click="cogsFrom=''; cogsTo=''; loadCogs()"
+                    class="border border-gray-300 px-4 py-2 rounded text-sm">
+              Todo el histórico
+            </button>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <div class="text-xs text-gray-500 uppercase">Costo bruto</div>
+            <div class="text-xl font-bold" x-text="money(cogs.gross_cogs ?? cogs.total_cogs)"></div>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <div class="text-xs text-gray-500 uppercase">Devuelto por clientes</div>
+            <div class="text-xl font-bold text-warn" x-text="money(cogs.returned_cost)"></div>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 p-4 ring-2 ring-brand/20">
+            <div class="text-xs text-gray-500 uppercase">Costo neto</div>
+            <div class="text-xl font-bold text-brand" x-text="money(cogs.total_cogs)"></div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Detalle por producto</h2>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Código</th>
+                <th class="px-4 py-2 text-left">Producto</th>
+                <th class="px-4 py-2 text-right">Unidades</th>
+                <th class="px-4 py-2 text-right">Costo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in (cogs.by_product || [])" :key="p.producto_id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 font-mono text-xs" x-text="p.codigo"></td>
+                  <td class="px-4 py-2" x-text="p.nombre"></td>
+                  <td class="px-4 py-2 text-right" x-text="num(p.quantity)"></td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="money(p.cogs)"></td>
+                </tr>
+              </template>
+              <tr x-show="!(cogs.by_product || []).length">
+                <td colspan="4" class="px-4 py-8 text-center text-gray-400">
+                  Sin salidas de inventario en el rango
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+
+    <!-- ===== PERIODOS ===== -->
+    <template x-if="tab === 'periods'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Ejercicio fiscal</h2>
+          <p class="text-xs text-gray-500 mb-4">Un periodo cerrado <strong>rechaza</strong>
+            cualquier asiento nuevo con esa fecha.</p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input x-model.number="newYear" type="number" placeholder="Año (ej. 2026)"
+                   class="border border-gray-300 rounded px-3 py-2">
+            <button @click="generateYear()" :disabled="busy || !newYear"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Generar 12 periodos
+            </button>
+            <input x-model="checkDate" type="date" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="checkDate_()" :disabled="busy || !checkDate"
+                    class="border border-gray-300 px-4 py-2 rounded text-sm">
+              ¿Puedo registrar en esta fecha?
+            </button>
+          </div>
+          <template x-if="checkResult">
+            <div class="mt-4 px-4 py-3 rounded text-sm"
+                 :class="checkResult.allowed ? 'bg-ok/10 text-ok border border-ok/30' : 'bg-red-50 text-red-700 border border-red-200'">
+              <span x-text="checkResult.allowed
+                ? `Permitido — periodo ${checkResult.period}`
+                : checkResult.error"></span>
+            </div>
+          </template>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Periodos</h2>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Periodo</th>
+                <th class="px-4 py-2 text-left">Desde</th>
+                <th class="px-4 py-2 text-left">Hasta</th>
+                <th class="px-4 py-2 text-center">Estado</th>
+                <th class="px-4 py-2 text-left">Cerrado</th>
+                <th class="px-4 py-2 text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in periods" :key="p.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 font-medium" x-text="p.name"></td>
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="p.date_from || '—'"></td>
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="p.date_to || '—'"></td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium"
+                          :class="p.is_locked ? 'bg-red-100 text-red-700' : 'bg-ok/10 text-ok'"
+                          x-text="p.is_locked ? 'Cerrado' : 'Abierto'"></span>
+                  </td>
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="(p.closed_at || '').slice(0,16) || '—'"></td>
+                  <td class="px-4 py-2 text-center">
+                    <button x-show="!p.is_locked" @click="closePeriod(p)"
+                            class="text-red-600 hover:underline text-xs">Cerrar</button>
+                    <button x-show="p.is_locked" @click="reopenPeriod(p)"
+                            class="text-brand hover:underline text-xs">Reabrir</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!periods.length">
+                <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                  Sin periodos definidos. Genera un ejercicio para poder cerrar meses.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+
+    <!-- ===== MULTIMONEDA ===== -->
+    <template x-if="tab === 'fx'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-4">Convertidor</h2>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+            <input x-model.number="convForm.amount" type="number" step="0.01"
+                   placeholder="Importe" class="border border-gray-300 rounded px-3 py-2">
+            <select x-model="convForm.from_currency" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">De…</option>
+              <template x-for="c in currencies" :key="c.code">
+                <option :value="c.code" x-text="`${c.code} — ${c.name}`"></option>
+              </template>
+            </select>
+            <select x-model="convForm.to_currency" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">A…</option>
+              <template x-for="c in currencies" :key="c.code">
+                <option :value="c.code" x-text="`${c.code} — ${c.name}`"></option>
+              </template>
+            </select>
+            <button @click="convert()"
+                    :disabled="busy || !convForm.amount || !convForm.from_currency || !convForm.to_currency"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Convertir
+            </button>
+            <div x-show="convResult" class="text-sm">
+              <div class="font-bold text-brand" x-text="money(convResult.result)"></div>
+              <div class="text-xs text-gray-500"
+                   x-text="`tasa ${convResult.from_rate} → ${convResult.to_rate}`"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Registrar diferencia cambiaria</h2>
+          <p class="text-xs text-gray-500 mb-4">Cuando un pago liquida a un tipo
+            distinto al del documento, la diferencia es una ganancia o pérdida real.</p>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <select x-model="fxForm.document_type" class="border border-gray-300 rounded px-3 py-2">
+              <option value="invoice">Factura</option>
+              <option value="sales_order">Pedido de venta</option>
+              <option value="purchase_order">Orden de compra</option>
+            </select>
+            <input x-model.number="fxForm.document_id" type="number"
+                   placeholder="ID documento *" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="fxForm.amount_currency" type="number" step="0.01"
+                   placeholder="Importe en divisa *" class="border border-gray-300 rounded px-3 py-2">
+            <input x-model.number="fxForm.payment_rate" type="number" step="0.0001"
+                   placeholder="Tipo de cambio del pago" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="recordFx()"
+                    :disabled="busy || !fxForm.document_id || !fxForm.amount_currency"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Registrar
+            </button>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <div class="text-xs text-gray-500 uppercase">Ganancia cambiaria</div>
+            <div class="text-xl font-bold text-ok" x-text="money(fx.total_gain)"></div>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <div class="text-xs text-gray-500 uppercase">Pérdida cambiaria</div>
+            <div class="text-xl font-bold text-red-600" x-text="money(fx.total_loss)"></div>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 p-4 ring-2 ring-brand/20">
+            <div class="text-xs text-gray-500 uppercase">Efecto neto</div>
+            <div class="text-xl font-bold" x-text="money(fx.net_effect)"></div>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Exposición por moneda</h2>
+            <p class="text-xs text-gray-500">Saldos abiertos convertidos a
+              <span x-text="exposure.base_currency"></span></p>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Moneda</th>
+                <th class="px-4 py-2 text-center">Documentos</th>
+                <th class="px-4 py-2 text-right">Saldo abierto</th>
+                <th class="px-4 py-2 text-right">Tasa</th>
+                <th class="px-4 py-2 text-right">En moneda base</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="c in (exposure.by_currency || [])" :key="c.currency">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 font-medium">
+                    <span x-text="c.currency"></span>
+                    <span x-show="c.is_base" class="text-xs text-gray-400">(base)</span>
+                  </td>
+                  <td class="px-4 py-2 text-center" x-text="c.documents"></td>
+                  <td class="px-4 py-2 text-right" x-text="money(c.open_balance)"></td>
+                  <td class="px-4 py-2 text-right text-xs" x-text="c.rate"></td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="money(c.open_balance_base)"></td>
+                </tr>
+              </template>
+              <tr x-show="!(exposure.by_currency || []).length">
+                <td colspan="5" class="px-4 py-8 text-center text-gray-400">Sin saldos abiertos</td>
+              </tr>
+            </tbody>
+            <tfoot x-show="(exposure.by_currency || []).length">
+              <tr class="bg-gray-50 font-semibold border-t border-gray-200">
+                <td colspan="4" class="px-4 py-2 text-right">Total en base</td>
+                <td class="px-4 py-2 text-right" x-text="money(exposure.total_base)"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Diferencias registradas</h2>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Fecha</th>
+                <th class="px-4 py-2 text-left">Documento</th>
+                <th class="px-4 py-2 text-left">Moneda</th>
+                <th class="px-4 py-2 text-right">Tasa doc.</th>
+                <th class="px-4 py-2 text-right">Tasa pago</th>
+                <th class="px-4 py-2 text-right">Importe divisa</th>
+                <th class="px-4 py-2 text-right">Diferencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="d in (fx.differences || [])" :key="d.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="(d.entry_date || '').slice(0,16)"></td>
+                  <td class="px-4 py-2 text-xs" x-text="`${docLabel(d.document_type)} #${d.document_id}`"></td>
+                  <td class="px-4 py-2" x-text="d.currency"></td>
+                  <td class="px-4 py-2 text-right text-xs" x-text="d.document_rate"></td>
+                  <td class="px-4 py-2 text-right text-xs" x-text="d.payment_rate"></td>
+                  <td class="px-4 py-2 text-right" x-text="num(d.amount_currency)"></td>
+                  <td class="px-4 py-2 text-right font-medium"
+                      :class="d.gain_or_loss === 'gain' ? 'text-ok' : 'text-red-600'"
+                      x-text="money(d.difference_base)"></td>
+                </tr>
+              </template>
+              <tr x-show="!(fx.differences || []).length">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                  Sin diferencias cambiarias registradas
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+
+  </main>
+<script>
+function valuacion() {
+  return {
+    tab: 'layers',
+    tabs: [
+      { id: 'layers', label: 'Capas de costo' },
+      { id: 'cogs', label: 'Costo de ventas' },
+      { id: 'periods', label: 'Periodos' },
+      { id: 'fx', label: 'Multimoneda' },
+    ],
+    busy: false, msg: '', msgOk: true,
+
+    layers: [], stockValue: {}, cogs: {}, periods: [], currencies: [],
+    productos: [], warehouses: [], exposure: {}, fx: {},
+    cogsFrom: '', cogsTo: '',
+    newYear: new Date().getFullYear(),
+    checkDate: '', checkResult: null,
+    convResult: null,
+
+    layerForm: { producto_id: '', warehouse_id: '', quantity: null, unit_cost: null },
+    convForm: { amount: null, from_currency: '', to_currency: '' },
+    fxForm: { document_type: 'invoice', document_id: null,
+              amount_currency: null, payment_rate: null },
+
+    get closedCount() {
+      return this.periods.filter(p => p.is_locked).length;
+    },
+
+    money(v) {
+      const n = Number(v || 0);
+      return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN',
+                                         maximumFractionDigits: 2 });
+    },
+    num(v) {
+      return Number(v || 0).toLocaleString('es-MX', { maximumFractionDigits: 4 });
+    },
+    methodLabel(m) {
+      return { fifo: 'PEPS', average: 'Promedio', standard: 'Estándar' }[m] || m || 'PEPS';
+    },
+    sourceLabel(s) {
+      return {
+        purchase_receipt: 'Recepción de compra',
+        sales_return: 'Devolución de cliente',
+        manual: 'Manual / apertura',
+      }[s] || s || '—';
+    },
+    docLabel(t) {
+      return { invoice: 'Factura', sales_order: 'Pedido',
+               purchase_order: 'Compra' }[t] || t;
+    },
+
+    token() {
+      const m = document.cookie.match(/token=([^;]+)/);
+      return m ? m[1] : new URLSearchParams(location.search).get('token') || '';
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${sep}token=${encodeURIComponent(this.token())}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const r = json.result;
+      if (r && r.error) throw new Error(r.error);
+      return r;
+    },
+
+    flash(text, ok = true) {
+      this.msg = text; this.msgOk = ok;
+      setTimeout(() => { this.msg = ''; }, 6000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadLayers(), this.loadStockValue(), this.loadCogs(),
+        this.loadPeriods(), this.loadCurrencies(), this.loadProductos(),
+        this.loadWarehouses(), this.loadFx(), this.loadExposure(),
+      ]);
+    },
+
+    async loadLayers() {
+      try { this.layers = await this.api('GET', '/api/valuation/layers') || [] }
+      catch (e) {}
+    },
+    async loadStockValue() {
+      try { this.stockValue = await this.api('GET', '/api/valuation/stock-value') || {} }
+      catch (e) {}
+    },
+    async loadCogs() {
+      const qs = [];
+      if (this.cogsFrom) qs.push(`date_from=${this.cogsFrom}`);
+      if (this.cogsTo) qs.push(`date_to=${this.cogsTo}`);
+      try {
+        this.cogs = await this.api('GET',
+          `/api/valuation/cogs${qs.length ? '?' + qs.join('&') : ''}`) || {};
+      } catch (e) {}
+    },
+    async loadPeriods() {
+      try { this.periods = await this.api('GET', '/api/periods') || [] }
+      catch (e) {}
+    },
+    async loadCurrencies() {
+      try {
+        const c = await this.api('GET', '/api/accounting/currencies');
+        this.currencies = Array.isArray(c) ? c : (c.currencies || []);
+      } catch (e) {}
+    },
+    async loadProductos() {
+      try {
+        const p = await this.api('GET', '/api/productos');
+        this.productos = Array.isArray(p) ? p : (p.productos || []);
+      } catch (e) {}
+    },
+    async loadWarehouses() {
+      try {
+        const w = await this.api('GET', '/api/inventory/warehouses');
+        this.warehouses = Array.isArray(w) ? w : (w.warehouses || []);
+      } catch (e) {}
+    },
+    async loadFx() {
+      try { this.fx = await this.api('GET', '/api/fx/differences') || {} }
+      catch (e) {}
+    },
+    async loadExposure() {
+      try { this.exposure = await this.api('GET', '/api/fx/exposure') || {} }
+      catch (e) {}
+    },
+
+    async addLayer() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/valuation/layers', {
+          producto_id: Number(this.layerForm.producto_id),
+          warehouse_id: Number(this.layerForm.warehouse_id),
+          quantity: Number(this.layerForm.quantity),
+          unit_cost: Number(this.layerForm.unit_cost || 0),
+        });
+        this.flash(`Capa registrada: ${this.num(r.quantity)} unidades a ${this.money(r.unit_cost)}`);
+        this.layerForm = { producto_id: '', warehouse_id: '', quantity: null, unit_cost: null };
+        await Promise.all([this.loadLayers(), this.loadStockValue()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async setMethod(productoId, method) {
+      if (!method) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/valuation/method',
+                                 { producto_id: productoId, method });
+        this.flash(`Método cambiado a ${this.methodLabel(r.costing_method)}`);
+        await this.loadStockValue();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async generateYear() {
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/periods/generate-year',
+                                 { year: Number(this.newYear) });
+        this.flash(r.count
+          ? `${r.count} periodos creados para ${r.year}`
+          : `Los periodos de ${r.year} ya existían`);
+        await this.loadPeriods();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async closePeriod(p) {
+      if (!confirm(`Cerrar ${p.name}? Después no se podrán registrar asientos con esa fecha.`)) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/periods/close', { period_id: p.id });
+        this.flash(`${r.period} cerrado — ${r.entries_in_period} asientos, ${this.money(r.total_debits)} en cargos`);
+        await this.loadPeriods();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async reopenPeriod(p) {
+      if (!confirm(`Reabrir ${p.name}? Queda registrado en la auditoría.`)) return;
+      this.busy = true;
+      try {
+        const r = await this.api('POST', '/api/periods/reopen', { period_id: p.id });
+        this.flash(`${r.period} reabierto`);
+        await this.loadPeriods();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async checkDate_() {
+      this.busy = true; this.checkResult = null;
+      try {
+        this.checkResult = await this.api('GET',
+          `/api/periods/check?date=${this.checkDate}`);
+      } catch (e) {
+        this.checkResult = { allowed: false, error: e.message };
+      }
+      this.busy = false;
+    },
+
+    async convert() {
+      this.busy = true; this.convResult = null;
+      try {
+        const q = new URLSearchParams({
+          amount: this.convForm.amount,
+          from_currency: this.convForm.from_currency,
+          to_currency: this.convForm.to_currency,
+        });
+        this.convResult = await this.api('GET', `/api/fx/convert?${q}`);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async recordFx() {
+      this.busy = true;
+      try {
+        const body = {
+          document_type: this.fxForm.document_type,
+          document_id: Number(this.fxForm.document_id),
+          amount_currency: Number(this.fxForm.amount_currency),
+        };
+        if (this.fxForm.payment_rate) body.payment_rate = Number(this.fxForm.payment_rate);
+        const r = await this.api('POST', '/api/fx/differences', body);
+        if (r.recorded) {
+          this.flash(`${r.gain_or_loss === 'gain' ? 'Ganancia' : 'Pérdida'} de ${this.money(Math.abs(r.difference_base))} registrada`);
+        } else {
+          this.flash(r.reason || 'Sin diferencia de tipo de cambio', false);
+        }
+        this.fxForm = { document_type: 'invoice', document_id: null,
+                        amount_currency: null, payment_rate: null };
+        await Promise.all([this.loadFx(), this.loadExposure()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+  }
+}
+</script>
+</body>
+</html>

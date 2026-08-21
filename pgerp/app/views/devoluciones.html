@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devoluciones y Crédito — PyGo ERP</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.14.9/dist/cdn.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        brand: '#2563EB', ok: '#10B981', warn: '#F59E0B', dark: '#0F172A',
+      } } }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 text-dark" x-data="devoluciones()" x-init="init()">
+
+  <nav class="bg-dark text-white px-6 py-3 flex items-center gap-6 text-sm">
+    <a href="/" class="font-semibold">PyGo ERP</a>
+    <a href="/ventas" class="hover:text-warn">Ventas</a>
+    <a href="/tesoreria" class="hover:text-warn">Tesorería</a>
+    <a href="/trazabilidad" class="hover:text-warn">Trazabilidad</a>
+    <a href="/valuacion" class="hover:text-warn">Valuación</a>
+    <span class="text-warn font-medium">Devoluciones</span>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-6 py-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold">Devoluciones y control de crédito</h1>
+      <p class="text-gray-500 text-sm">Devoluciones de cliente, notas de crédito
+        y límites de crédito por cliente</p>
+    </header>
+
+    <!-- KPIs -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Devoluciones abiertas</div>
+        <div class="text-2xl font-bold text-warn" x-text="openReturns"></div>
+        <div class="text-xs text-gray-400" x-text="`${returns.length} en total`"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Notas por aplicar</div>
+        <div class="text-2xl font-bold text-brand" x-text="money(openNotesAmount)"></div>
+        <div class="text-xs text-gray-400" x-text="`${openNotes} nota(s)`"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Exposición total</div>
+        <div class="text-2xl font-bold" x-text="money(totalExposure)"></div>
+        <div class="text-xs text-gray-400" x-text="`${(portfolio.count || 0)} clientes`"></div>
+      </div>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <div class="text-xs text-gray-500 uppercase">Sobre su límite</div>
+        <div class="text-2xl font-bold"
+             :class="(portfolio.over_limit_count || 0) ? 'text-red-600' : 'text-ok'"
+             x-text="portfolio.over_limit_count || 0"></div>
+      </div>
+    </section>
+
+    <!-- Tabs -->
+    <div class="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+      <template x-for="t in tabs" :key="t.id">
+        <button @click="tab = t.id"
+                class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+                :class="tab === t.id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-dark'"
+                x-text="t.label"></button>
+      </template>
+    </div>
+
+    <div x-show="msg" class="mb-4 px-4 py-3 rounded text-sm"
+         :class="msgOk ? 'bg-ok/10 text-ok border border-ok/30' : 'bg-red-50 text-red-700 border border-red-200'"
+         x-text="msg"></div>
+
+    <!-- ===== DEVOLUCIONES ===== -->
+    <template x-if="tab === 'returns'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Nueva devolución</h2>
+          <p class="text-xs text-gray-500 mb-4">Al indicar el pedido, el sistema
+            solo permite devolver lo que realmente se entregó.</p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+            <select x-model="retForm.cliente_id" @change="loadCustomerOrders()"
+                    class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Cliente *</option>
+              <template x-for="c in clientes" :key="c.id">
+                <option :value="c.id" x-text="c.nombre"></option>
+              </template>
+            </select>
+            <select x-model="retForm.sales_order_id" @change="loadOrderItems()"
+                    class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Pedido (opcional)</option>
+              <template x-for="o in customerOrders" :key="o.id">
+                <option :value="o.id" x-text="`#${o.id} — ${money(o.total)} (${o.status})`"></option>
+              </template>
+            </select>
+            <select x-model="retForm.warehouse_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Almacén de retorno</option>
+              <template x-for="w in warehouses" :key="w.id">
+                <option :value="w.id" x-text="w.name"></option>
+              </template>
+            </select>
+            <input x-model="retForm.reason" placeholder="Motivo"
+                   class="border border-gray-300 rounded px-3 py-2">
+          </div>
+
+          <label class="flex items-center gap-2 text-sm mb-4">
+            <input type="checkbox" x-model="retForm.restock">
+            <span>Reingresar al inventario
+              <span class="text-gray-400 text-xs">(desmarca si la mercancía se destruye)</span>
+            </span>
+          </label>
+
+          <div class="border-t border-gray-100 pt-4">
+            <div class="flex justify-between items-center mb-2">
+              <h3 class="text-sm font-medium">Líneas</h3>
+              <button @click="addRetLine()" class="text-brand text-sm hover:underline">
+                + Agregar línea
+              </button>
+            </div>
+            <template x-for="(l, i) in retForm.lines" :key="i">
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+                <select x-model="l.producto_id" class="border border-gray-300 rounded px-3 py-2 text-sm">
+                  <option value="">Producto</option>
+                  <template x-for="p in (orderItems.length ? orderItems : productos)" :key="p.producto_id || p.id">
+                    <option :value="p.producto_id || p.id"
+                            x-text="p.codigo ? `${p.codigo} (vendido: ${num(p.quantity || 0)})` : p.nombre"></option>
+                  </template>
+                </select>
+                <input x-model.number="l.quantity" type="number" step="0.01"
+                       placeholder="Cantidad" class="border border-gray-300 rounded px-3 py-2 text-sm">
+                <input x-model.number="l.unit_price" type="number" step="0.01"
+                       placeholder="Precio (auto del pedido)"
+                       class="border border-gray-300 rounded px-3 py-2 text-sm">
+                <button @click="retForm.lines.splice(i, 1)"
+                        class="text-red-600 text-sm hover:underline text-left">Quitar</button>
+              </div>
+            </template>
+            <button @click="createReturn()"
+                    :disabled="busy || !retForm.cliente_id || !retForm.lines.filter(l => l.producto_id && l.quantity).length"
+                    class="bg-brand text-white px-5 py-2 rounded font-medium disabled:opacity-40 mt-2">
+              Registrar devolución
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="font-semibold">Devoluciones</h2>
+            <select x-model="retStatus" @change="loadReturns()"
+                    class="border border-gray-300 rounded px-3 py-1.5 text-sm">
+              <option value="">Todas</option>
+              <option value="draft">Borrador</option>
+              <option value="received">Recibidas</option>
+              <option value="credited">Acreditadas</option>
+              <option value="cancelled">Canceladas</option>
+            </select>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Folio</th>
+                <th class="px-4 py-2 text-left">Cliente</th>
+                <th class="px-4 py-2 text-left">Motivo</th>
+                <th class="px-4 py-2 text-center">Reingreso</th>
+                <th class="px-4 py-2 text-right">Total</th>
+                <th class="px-4 py-2 text-center">Estado</th>
+                <th class="px-4 py-2 text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in returns" :key="r.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 font-mono text-xs" x-text="r.folio || `#${r.id}`"></td>
+                  <td class="px-4 py-2" x-text="r.cliente_nombre"></td>
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="r.reason || '—'"></td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="text-xs" :class="r.restock ? 'text-ok' : 'text-red-600'"
+                          x-text="r.restock ? 'Sí' : 'Destruida'"></span>
+                  </td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="money(r.total)"></td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium"
+                          :class="{
+                            'bg-gray-100 text-gray-600': r.status === 'draft',
+                            'bg-warn/10 text-warn': r.status === 'received',
+                            'bg-ok/10 text-ok': r.status === 'credited',
+                            'bg-red-50 text-red-600': r.status === 'cancelled'
+                          }" x-text="retLabel(r.status)"></span>
+                  </td>
+                  <td class="px-4 py-2 text-center whitespace-nowrap">
+                    <button x-show="r.status === 'draft'" @click="receiveReturn(r)"
+                            class="text-brand hover:underline text-xs">Recibir</button>
+                    <button x-show="r.status === 'received'" @click="creditReturn(r)"
+                            class="text-ok hover:underline text-xs">Emitir nota</button>
+                    <button x-show="['draft','received'].includes(r.status)"
+                            @click="cancelReturn(r)"
+                            class="text-red-600 hover:underline text-xs ml-2">Cancelar</button>
+                    <button @click="detail = (detail === r.id ? null : r.id)"
+                            class="text-gray-500 hover:underline text-xs ml-2">Líneas</button>
+                  </td>
+                </tr>
+              </template>
+              <template x-for="r in returns.filter(x => x.id === detail)" :key="`d-${r.id}`">
+                <tr class="bg-gray-50">
+                  <td colspan="7" class="px-6 py-3">
+                    <table class="w-full text-xs">
+                      <thead class="text-gray-500">
+                        <tr>
+                          <th class="text-left py-1">Producto</th>
+                          <th class="text-right py-1">Cantidad</th>
+                          <th class="text-right py-1">Precio</th>
+                          <th class="text-right py-1">Importe</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="l in (r.lines || [])" :key="l.id">
+                          <tr class="border-t border-gray-200">
+                            <td class="py-1">
+                              <span class="font-mono" x-text="l.codigo"></span>
+                              <span class="text-gray-500" x-text="l.nombre"></span>
+                            </td>
+                            <td class="text-right py-1" x-text="num(l.quantity)"></td>
+                            <td class="text-right py-1" x-text="money(l.unit_price)"></td>
+                            <td class="text-right py-1 font-medium" x-text="money(l.line_total)"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!returns.length">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                  Sin devoluciones registradas
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+    <!-- ===== NOTAS DE CREDITO ===== -->
+    <template x-if="tab === 'notes'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+          <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h2 class="font-semibold">Notas de crédito</h2>
+              <p class="text-xs text-gray-500">Se aplican a facturas del mismo cliente</p>
+            </div>
+            <select x-model="noteStatus" @change="loadNotes()"
+                    class="border border-gray-300 rounded px-3 py-1.5 text-sm">
+              <option value="">Todas</option>
+              <option value="open">Abiertas</option>
+              <option value="partially_applied">Parciales</option>
+              <option value="applied">Aplicadas</option>
+              <option value="cancelled">Canceladas</option>
+            </select>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Folio</th>
+                <th class="px-4 py-2 text-left">Cliente</th>
+                <th class="px-4 py-2 text-left">Motivo</th>
+                <th class="px-4 py-2 text-right">Importe</th>
+                <th class="px-4 py-2 text-right">Aplicado</th>
+                <th class="px-4 py-2 text-right">Disponible</th>
+                <th class="px-4 py-2 text-center">Estado</th>
+                <th class="px-4 py-2 text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="n in notes" :key="n.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 font-mono text-xs" x-text="n.folio || `#${n.id}`"></td>
+                  <td class="px-4 py-2" x-text="n.cliente_nombre"></td>
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="n.reason || '—'"></td>
+                  <td class="px-4 py-2 text-right" x-text="money(n.amount)"></td>
+                  <td class="px-4 py-2 text-right text-gray-500" x-text="money(n.applied_amount)"></td>
+                  <td class="px-4 py-2 text-right font-medium text-brand" x-text="money(n.remaining)"></td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium"
+                          :class="{
+                            'bg-brand/10 text-brand': n.status === 'open',
+                            'bg-warn/10 text-warn': n.status === 'partially_applied',
+                            'bg-ok/10 text-ok': n.status === 'applied',
+                            'bg-gray-100 text-gray-500': n.status === 'cancelled'
+                          }" x-text="noteLabel(n.status)"></span>
+                  </td>
+                  <td class="px-4 py-2 text-center whitespace-nowrap">
+                    <button x-show="n.remaining > 0 && n.status !== 'cancelled'"
+                            @click="openApply(n)"
+                            class="text-brand hover:underline text-xs">Aplicar</button>
+                    <button x-show="!n.applied_amount && n.status !== 'cancelled'"
+                            @click="cancelNote(n)"
+                            class="text-red-600 hover:underline text-xs ml-2">Cancelar</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!notes.length">
+                <td colspan="8" class="px-4 py-8 text-center text-gray-400">
+                  Sin notas de crédito. Se generan al acreditar una devolución recibida.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <template x-if="applyFor">
+          <div class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+               @click.self="applyFor = null">
+            <div class="bg-white rounded-lg max-w-lg w-full p-6">
+              <h3 class="font-semibold mb-1">
+                Aplicar nota <span class="font-mono" x-text="applyFor.folio"></span>
+              </h3>
+              <p class="text-xs text-gray-500 mb-4">
+                Cliente <strong x-text="applyFor.cliente_nombre"></strong> ·
+                disponible <strong x-text="money(applyFor.remaining)"></strong>
+              </p>
+              <div class="space-y-3">
+                <select x-model="applyForm.invoice_id" class="border border-gray-300 rounded px-3 py-2 w-full">
+                  <option value="">Factura a abonar *</option>
+                  <template x-for="f in customerInvoices" :key="f.id">
+                    <option :value="f.id"
+                            x-text="`${f.folio || '#' + f.id} — debe ${money((f.total || 0) - (f.amount_paid || 0))}`"></option>
+                  </template>
+                </select>
+                <input x-model.number="applyForm.amount" type="number" step="0.01"
+                       placeholder="Importe (vacío = lo que quepa)"
+                       class="border border-gray-300 rounded px-3 py-2 w-full">
+              </div>
+              <div class="flex gap-2 justify-end mt-5">
+                <button @click="applyFor = null" class="px-4 py-2 text-sm">Cancelar</button>
+                <button @click="applyNote()" :disabled="busy || !applyForm.invoice_id"
+                        class="bg-brand text-white px-4 py-2 rounded text-sm disabled:opacity-40">
+                  Aplicar
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- ===== CREDITO ===== -->
+    <template x-if="tab === 'credit'">
+      <div>
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Límite de crédito</h2>
+          <p class="text-xs text-gray-500 mb-4">Límite 0 = sin restricción.
+            El bloqueo actúa al crear el pedido, no solo en un reporte.</p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select x-model="limitForm.cliente_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Cliente *</option>
+              <template x-for="c in clientes" :key="c.id">
+                <option :value="c.id" x-text="c.nombre"></option>
+              </template>
+            </select>
+            <input x-model.number="limitForm.credit_limit" type="number" step="0.01"
+                   placeholder="Límite de crédito" class="border border-gray-300 rounded px-3 py-2">
+            <label class="flex items-center gap-2 text-sm border border-gray-300 rounded px-3 py-2">
+              <input type="checkbox" x-model="limitForm.credit_hold">
+              <span>Bloqueo total</span>
+            </label>
+            <button @click="setLimit()" :disabled="busy || !limitForm.cliente_id"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Guardar
+            </button>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 class="font-semibold mb-1">Simular una venta</h2>
+          <p class="text-xs text-gray-500 mb-4">Comprueba si un importe cabe antes
+            de capturar el pedido.</p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select x-model="checkForm.cliente_id" class="border border-gray-300 rounded px-3 py-2">
+              <option value="">Cliente *</option>
+              <template x-for="c in clientes" :key="c.id">
+                <option :value="c.id" x-text="c.nombre"></option>
+              </template>
+            </select>
+            <input x-model.number="checkForm.amount" type="number" step="0.01"
+                   placeholder="Importe" class="border border-gray-300 rounded px-3 py-2">
+            <button @click="checkCredit()" :disabled="busy || !checkForm.cliente_id"
+                    class="bg-brand text-white px-4 py-2 rounded font-medium disabled:opacity-40">
+              Verificar
+            </button>
+          </div>
+          <template x-if="checkResult">
+            <div class="mt-4 px-4 py-3 rounded text-sm"
+                 :class="checkResult.allowed ? 'bg-ok/10 border border-ok/30' : 'bg-red-50 border border-red-200'">
+              <div class="font-medium" :class="checkResult.allowed ? 'text-ok' : 'text-red-700'"
+                   x-text="checkResult.allowed ? 'Venta permitida' : (checkResult.reason || checkResult.error)"></div>
+              <div class="text-xs text-gray-600 mt-1 grid grid-cols-2 md:grid-cols-4 gap-2">
+                <span>Límite: <strong x-text="money(checkResult.credit_limit)"></strong></span>
+                <span>Exposición: <strong x-text="money(checkResult.exposure)"></strong></span>
+                <span>Proyectado: <strong x-text="money(checkResult.projected)"></strong></span>
+                <span x-show="checkResult.over_by">Excede por:
+                  <strong class="text-red-600" x-text="money(checkResult.over_by)"></strong></span>
+              </div>
+            </div>
+          </template>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+          <div class="px-5 py-3 border-b border-gray-200">
+            <h2 class="font-semibold">Cartera de clientes</h2>
+            <p class="text-xs text-gray-500">Exposición = facturas sin pagar +
+              pedidos confirmados sin facturar − notas de crédito abiertas</p>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Cliente</th>
+                <th class="px-4 py-2 text-right">Facturas</th>
+                <th class="px-4 py-2 text-right">Pedidos</th>
+                <th class="px-4 py-2 text-right">Notas</th>
+                <th class="px-4 py-2 text-right">Exposición</th>
+                <th class="px-4 py-2 text-right">Límite</th>
+                <th class="px-4 py-2 text-right">Disponible</th>
+                <th class="px-4 py-2 text-center">Uso</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="c in (portfolio.customers || [])" :key="c.cliente_id">
+                <tr class="border-t border-gray-100" :class="c.over_limit ? 'bg-red-50' : ''">
+                  <td class="px-4 py-2">
+                    <span x-text="c.nombre"></span>
+                    <span x-show="c.credit_hold"
+                          class="ml-1 px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">bloqueado</span>
+                  </td>
+                  <td class="px-4 py-2 text-right" x-text="money(c.open_invoices)"></td>
+                  <td class="px-4 py-2 text-right" x-text="money(c.pending_orders)"></td>
+                  <td class="px-4 py-2 text-right text-ok" x-text="money(c.open_credit_notes)"></td>
+                  <td class="px-4 py-2 text-right font-medium" x-text="money(c.exposure)"></td>
+                  <td class="px-4 py-2 text-right text-gray-500"
+                      x-text="c.credit_limit ? money(c.credit_limit) : 'sin límite'"></td>
+                  <td class="px-4 py-2 text-right"
+                      :class="(c.available ?? 1) < 0 ? 'text-red-600 font-medium' : ''"
+                      x-text="c.available === null ? '—' : money(c.available)"></td>
+                  <td class="px-4 py-2">
+                    <template x-if="c.utilisation_pct !== null">
+                      <div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                          <div class="h-2 rounded-full"
+                               :class="c.utilisation_pct > 100 ? 'bg-red-600' : (c.utilisation_pct > 80 ? 'bg-warn' : 'bg-ok')"
+                               :style="`width: ${Math.min(c.utilisation_pct, 100)}%`"></div>
+                        </div>
+                        <div class="text-xs text-gray-500 text-center mt-0.5"
+                             x-text="`${c.utilisation_pct}%`"></div>
+                      </div>
+                    </template>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!(portfolio.customers || []).length">
+                <td colspan="8" class="px-4 py-8 text-center text-gray-400">
+                  Sin exposición registrada
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h2 class="font-semibold">Bitácora de decisiones</h2>
+              <p class="text-xs text-gray-500">Por qué se bloqueó una venta</p>
+            </div>
+            <label class="text-xs flex items-center gap-2">
+              <input type="checkbox" x-model="blockedOnly" @change="loadEvents()">
+              Solo bloqueos
+            </label>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600">
+              <tr>
+                <th class="px-4 py-2 text-left">Fecha</th>
+                <th class="px-4 py-2 text-left">Cliente</th>
+                <th class="px-4 py-2 text-left">Evento</th>
+                <th class="px-4 py-2 text-right">Importe</th>
+                <th class="px-4 py-2 text-right">Antes → Después</th>
+                <th class="px-4 py-2 text-center">Resultado</th>
+                <th class="px-4 py-2 text-left">Motivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="e in (events.events || [])" :key="e.id">
+                <tr class="border-t border-gray-100">
+                  <td class="px-4 py-2 text-xs text-gray-500" x-text="(e.created_at || '').slice(0,16)"></td>
+                  <td class="px-4 py-2 text-xs" x-text="e.cliente_nombre"></td>
+                  <td class="px-4 py-2 text-xs" x-text="e.event_type"></td>
+                  <td class="px-4 py-2 text-right text-xs" x-text="money(e.amount)"></td>
+                  <td class="px-4 py-2 text-right text-xs text-gray-500"
+                      x-text="`${money(e.exposure_before)} → ${money(e.exposure_after)}`"></td>
+                  <td class="px-4 py-2 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium"
+                          :class="e.blocked ? 'bg-red-100 text-red-700' : 'bg-ok/10 text-ok'"
+                          x-text="e.blocked ? 'Bloqueado' : 'Permitido'"></span>
+                  </td>
+                  <td class="px-4 py-2 text-xs text-gray-600" x-text="e.notes || '—'"></td>
+                </tr>
+              </template>
+              <tr x-show="!(events.events || []).length">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                  Sin decisiones registradas
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </template>
+
+  </main>
+<script>
+function devoluciones() {
+  return {
+    tab: 'returns',
+    tabs: [
+      { id: 'returns', label: 'Devoluciones' },
+      { id: 'notes', label: 'Notas de crédito' },
+      { id: 'credit', label: 'Control de crédito' },
+    ],
+    busy: false, msg: '', msgOk: true,
+
+    returns: [], notes: [], portfolio: {}, events: {},
+    clientes: [], productos: [], warehouses: [],
+    customerOrders: [], orderItems: [], customerInvoices: [],
+    retStatus: '', noteStatus: '', blockedOnly: false,
+    detail: null, applyFor: null, checkResult: null,
+
+    retForm: { cliente_id: '', sales_order_id: '', warehouse_id: '',
+               reason: '', restock: true, lines: [{}] },
+    applyForm: { invoice_id: '', amount: null },
+    limitForm: { cliente_id: '', credit_limit: null, credit_hold: false },
+    checkForm: { cliente_id: '', amount: null },
+
+    get openReturns() {
+      return this.returns.filter(r => ['draft', 'received'].includes(r.status)).length;
+    },
+    get openNotes() {
+      return this.notes.filter(n => Number(n.remaining || 0) > 0
+                                    && n.status !== 'cancelled').length;
+    },
+    get openNotesAmount() {
+      return this.notes
+        .filter(n => n.status !== 'cancelled')
+        .reduce((s, n) => s + Number(n.remaining || 0), 0);
+    },
+    get totalExposure() {
+      return (this.portfolio.customers || [])
+        .reduce((s, c) => s + Number(c.exposure || 0), 0);
+    },
+
+    money(v) {
+      return Number(v || 0).toLocaleString('es-MX',
+        { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 });
+    },
+    num(v) {
+      return Number(v || 0).toLocaleString('es-MX', { maximumFractionDigits: 4 });
+    },
+    retLabel(s) {
+      return { draft: 'Borrador', received: 'Recibida',
+               credited: 'Acreditada', cancelled: 'Cancelada' }[s] || s;
+    },
+    noteLabel(s) {
+      return { open: 'Abierta', partially_applied: 'Parcial',
+               applied: 'Aplicada', cancelled: 'Cancelada' }[s] || s;
+    },
+
+    token() {
+      const m = document.cookie.match(/token=([^;]+)/);
+      return m ? m[1] : new URLSearchParams(location.search).get('token') || '';
+    },
+
+    async api(method, path, body) {
+      const sep = path.includes('?') ? '&' : '?';
+      const url = `${path}${sep}token=${encodeURIComponent(this.token())}`;
+      const opts = { method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const r = json.result;
+      if (r && r.error) throw new Error(r.error);
+      return r;
+    },
+
+    flash(text, ok = true) {
+      this.msg = text; this.msgOk = ok;
+      setTimeout(() => { this.msg = ''; }, 7000);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadReturns(), this.loadNotes(), this.loadPortfolio(),
+        this.loadEvents(), this.loadClientes(), this.loadProductos(),
+        this.loadWarehouses(),
+      ]);
+    },
+
+    async loadReturns() {
+      try {
+        const q = this.retStatus ? `?status=${this.retStatus}` : '';
+        this.returns = await this.api('GET', `/api/sales-returns${q}`) || [];
+      } catch (e) {}
+    },
+    async loadNotes() {
+      try {
+        const q = this.noteStatus ? `?status=${this.noteStatus}` : '';
+        this.notes = await this.api('GET', `/api/credit-notes${q}`) || [];
+      } catch (e) {}
+    },
+    async loadPortfolio() {
+      try { this.portfolio = await this.api('GET', '/api/credit/exposure') || {} }
+      catch (e) {}
+    },
+    async loadEvents() {
+      try {
+        this.events = await this.api('GET',
+          `/api/credit/events?blocked_only=${this.blockedOnly ? 1 : 0}`) || {};
+      } catch (e) {}
+    },
+    async loadClientes() {
+      try {
+        const c = await this.api('GET', '/api/clientes');
+        this.clientes = Array.isArray(c) ? c : (c.clientes || []);
+      } catch (e) {}
+    },
+    async loadProductos() {
+      try {
+        const p = await this.api('GET', '/api/productos');
+        this.productos = Array.isArray(p) ? p : (p.productos || []);
+      } catch (e) {}
+    },
+    async loadWarehouses() {
+      try {
+        const w = await this.api('GET', '/api/inventory/warehouses');
+        this.warehouses = Array.isArray(w) ? w : (w.warehouses || []);
+      } catch (e) {}
+    },
+
+    async loadCustomerOrders() {
+      this.customerOrders = []; this.orderItems = [];
+      if (!this.retForm.cliente_id) return;
+      try {
+        // orders.list already embeds the line items, so no per-order fetch
+        const all = await this.api('GET',
+          `/api/sales/orders?cliente_id=${this.retForm.cliente_id}`);
+        const list = Array.isArray(all) ? all : (all.orders || []);
+        this.customerOrders = list.filter(
+          o => ['confirmed', 'delivered', 'invoiced'].includes(o.status));
+      } catch (e) {}
+    },
+
+    loadOrderItems() {
+      this.orderItems = [];
+      if (!this.retForm.sales_order_id) return;
+      const order = this.customerOrders.find(
+        o => String(o.id) === String(this.retForm.sales_order_id));
+      if (!order) return;
+      const byId = {};
+      this.productos.forEach(p => { byId[p.id] = p });
+      this.orderItems = (order.items || []).map(i => ({
+        producto_id: i.producto_id,
+        codigo: (byId[i.producto_id] || {}).codigo || `#${i.producto_id}`,
+        quantity: i.quantity,
+        unit_price: i.precio_unitario,
+      }));
+    },
+
+    addRetLine() { this.retForm.lines.push({}) },
+
+    async createReturn() {
+      this.busy = true;
+      try {
+        const lines = this.retForm.lines
+          .filter(l => l.producto_id && l.quantity > 0)
+          .map(l => {
+            const o = { producto_id: Number(l.producto_id),
+                        quantity: Number(l.quantity) };
+            if (l.unit_price) o.unit_price = Number(l.unit_price);
+            return o;
+          });
+        const body = { cliente_id: Number(this.retForm.cliente_id), lines,
+                       restock: this.retForm.restock ? 1 : 0 };
+        if (this.retForm.sales_order_id) body.sales_order_id = Number(this.retForm.sales_order_id);
+        if (this.retForm.warehouse_id) body.warehouse_id = Number(this.retForm.warehouse_id);
+        if (this.retForm.reason) body.reason = this.retForm.reason;
+
+        const r = await this.api('POST', '/api/sales-returns', body);
+        this.flash(`Devolución ${r.folio} creada por ${this.money(r.total)}`);
+        this.retForm = { cliente_id: '', sales_order_id: '', warehouse_id: '',
+                         reason: '', restock: true, lines: [{}] };
+        this.orderItems = [];
+        await this.loadReturns();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async receiveReturn(r) {
+      this.busy = true;
+      try {
+        const res = await this.api('POST', '/api/sales-returns/receive',
+                                   { return_id: r.id });
+        this.flash(res.restock
+          ? `Mercancía recibida · ${this.money(res.value_returned_to_inventory)} devueltos al inventario`
+          : 'Devolución recibida — mercancía destruida, no reingresa al inventario');
+        await this.loadReturns();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async creditReturn(r) {
+      this.busy = true;
+      try {
+        const res = await this.api('POST', '/api/sales-returns/credit',
+                                   { return_id: r.id });
+        this.flash(`Nota de crédito ${res.folio} emitida por ${this.money(res.amount)}`);
+        await Promise.all([this.loadReturns(), this.loadNotes(), this.loadPortfolio()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async cancelReturn(r) {
+      if (!confirm(`Cancelar la devolución ${r.folio}?`)) return;
+      this.busy = true;
+      try {
+        await this.api('POST', '/api/sales-returns/cancel', { return_id: r.id });
+        this.flash('Devolución cancelada');
+        await this.loadReturns();
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async openApply(n) {
+      this.applyFor = n;
+      this.applyForm = { invoice_id: '', amount: null };
+      this.customerInvoices = [];
+      try {
+        const all = await this.api('GET', '/api/facturas');
+        const list = Array.isArray(all) ? all : (all.facturas || []);
+        this.customerInvoices = list.filter(
+          f => String(f.cliente_id) === String(n.cliente_id)
+               && (Number(f.total || 0) - Number(f.amount_paid || 0)) > 0.01);
+      } catch (e) {}
+    },
+
+    async applyNote() {
+      this.busy = true;
+      try {
+        const body = { credit_note_id: this.applyFor.id,
+                       invoice_id: Number(this.applyForm.invoice_id) };
+        if (this.applyForm.amount) body.amount = Number(this.applyForm.amount);
+        const r = await this.api('POST', '/api/credit-notes/apply', body);
+        this.flash(`Aplicados ${this.money(r.amount_applied)} · nota queda en ${this.money(r.credit_note_remaining)} · factura debe ${this.money(r.invoice_due_after)}`);
+        this.applyFor = null;
+        await Promise.all([this.loadNotes(), this.loadPortfolio()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async cancelNote(n) {
+      if (!confirm(`Cancelar la nota ${n.folio}?`)) return;
+      this.busy = true;
+      try {
+        await this.api('POST', '/api/credit-notes/cancel', { credit_note_id: n.id });
+        this.flash('Nota cancelada');
+        await Promise.all([this.loadNotes(), this.loadPortfolio()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async setLimit() {
+      this.busy = true;
+      try {
+        const body = { cliente_id: Number(this.limitForm.cliente_id),
+                       credit_hold: this.limitForm.credit_hold ? 1 : 0 };
+        if (this.limitForm.credit_limit !== null) {
+          body.credit_limit = Number(this.limitForm.credit_limit);
+        }
+        const r = await this.api('POST', '/api/credit/limit', body);
+        this.flash(`${r.nombre}: límite ${r.credit_limit ? this.money(r.credit_limit) : 'sin límite'}${r.credit_hold ? ' · BLOQUEADO' : ''}`);
+        await Promise.all([this.loadPortfolio(), this.loadClientes()]);
+      } catch (e) { this.flash(e.message, false) }
+      this.busy = false;
+    },
+
+    async checkCredit() {
+      this.busy = true; this.checkResult = null;
+      try {
+        const q = new URLSearchParams({ cliente_id: this.checkForm.cliente_id,
+                                        amount: this.checkForm.amount || 0 });
+        this.checkResult = await this.api('GET', `/api/credit/check?${q}`);
+      } catch (e) {
+        this.checkResult = { allowed: false, error: e.message };
+      }
+      this.busy = false;
+    },
+  }
+}
+</script>
+</body>
+</html>
