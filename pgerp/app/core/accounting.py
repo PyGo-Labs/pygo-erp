@@ -308,12 +308,19 @@ def income_statement(**kwargs):
     
     # Real cost of goods sold, taken from the valuation layers that were
     # actually consumed. Before this the statement ignored inventory cost.
+    # Sales returns re-enter inventory as an 'in' entry sourced from
+    # sales_return, so they must be netted off or COGS stays overstated.
     cogs = 0.0
     try:
-        row = db.execute(
+        out_row = db.execute(
             "SELECT COALESCE(SUM(total_value), 0) AS total "
             "FROM stock_valuation_entries WHERE movement_type = 'out'").fetchone()
-        cogs = round(float(row["total"] or 0), 2)
+        returned_row = db.execute(
+            "SELECT COALESCE(SUM(total_value), 0) AS total "
+            "FROM stock_valuation_entries "
+            "WHERE movement_type = 'in' AND source_type = 'sales_return'").fetchone()
+        cogs = round(float(out_row["total"] or 0)
+                     - float(returned_row["total"] or 0), 2)
     except Exception:
         cogs = 0.0
 

@@ -30,6 +30,7 @@ def _load_all_migrations():
     from core.migrations import setup_audit  # noqa: F401
     from core.migrations import valuation  # noqa: F401
     from core.migrations import traceability  # noqa: F401
+    from core.migrations import sales_returns  # noqa: F401
 
 
 def _setup_db():

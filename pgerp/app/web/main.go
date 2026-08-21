@@ -1303,6 +1303,57 @@ func registerRoutes(app *web.App) {
 	r.Handle("POST", "/api/reorder/create-rfq", func(ctx map[string]interface{}) (interface{}, error) {
 		return app.Call("core.reorder.create_rfq", ctx)
 	}, false)
+
+	// --- D3: Sales returns ---
+	r.Handle("GET", "/api/sales-returns", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales_returns.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/sales-returns", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales_returns.create", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/sales-returns/receive", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales_returns.receive", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/sales-returns/credit", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales_returns.credit", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/sales-returns/cancel", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.sales_returns.cancel", ctx)
+	}, false)
+
+	// --- D3: Credit notes ---
+	r.Handle("GET", "/api/credit-notes", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.credit_notes.list", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/credit-notes/apply", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.credit_notes.apply", ctx)
+	}, false)
+
+	r.Handle("POST", "/api/credit-notes/cancel", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.credit_notes.cancel", ctx)
+	}, false)
+
+	// --- D3: Customer credit limits ---
+	r.Handle("POST", "/api/credit/limit", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.credit.set_limit", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/credit/check", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.credit.check", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/credit/exposure", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.credit.exposure", ctx)
+	}, false)
+
+	r.Handle("GET", "/api/credit/events", func(ctx map[string]interface{}) (interface{}, error) {
+		return app.Call("core.credit.events", ctx)
+	}, false)
 }
 
 func loadTemplate(path string) string {

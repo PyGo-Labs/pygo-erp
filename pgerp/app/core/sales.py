@@ -86,18 +86,42 @@ def sales_orders_create(cliente_id=None, items=None, notes=None, token=None, **k
     else:
         user_id = None
     
-    # Calculate totals
+    # Calculate totals. Accept discount or discount_pct, and keep the gross
+    # subtotal plus the discount amount so the document shows what was given away.
     subtotal = 0
+    gross_subtotal = 0
+    discount_total = 0
     for item in items:
         qty = float(item.get("quantity", 1))
         price = float(item.get("precio_unitario", item.get("price", 0)))
-        discount = float(item.get("discount", 0))
-        item_total = qty * price * (1 - discount / 100)
+        discount = float(item.get("discount_pct", item.get("discount", 0)) or 0)
+        if discount < 0 or discount > 100:
+            return {"error": f"discount_pct must be between 0 and 100, got {discount}"}
+        gross = qty * price
+        item_total = gross * (1 - discount / 100)
+        gross_subtotal += gross
+        discount_total += gross - item_total
         subtotal += item_total
     
     tax_rate = float(kwargs.get("tax_rate", 16))
     tax = subtotal * tax_rate / 100
     total = subtotal + tax
+
+    # Refuse the order when it would push the customer past their credit limit.
+    try:
+        from core.credit import check_credit, log_credit_event
+        decision = check_credit(db, cliente_id, total)
+        log_credit_event(db, cliente_id, "order_create", "sales_order", None,
+                         total, decision)
+        db.commit()
+        if not decision.get("allowed"):
+            return {"error": decision.get("reason", "credit check failed"),
+                    "credit": {k: decision.get(k) for k in
+                               ("credit_limit", "exposure", "projected",
+                                "available", "over_by", "open_invoices",
+                                "pending_orders")}}
+    except ImportError:
+        pass
     
     cursor = db.execute(
         """INSERT INTO sales_orders (cliente_id, status, subtotal, tax, total, notes, user_id, created_at)
@@ -105,15 +129,33 @@ def sales_orders_create(cliente_id=None, items=None, notes=None, token=None, **k
         (cliente_id, subtotal, tax, total, notes, user_id, datetime.utcnow().isoformat())
     )
     order_id = cursor.lastrowid
+
+    try:
+        db.execute(
+            "UPDATE sales_orders SET gross_subtotal = ?, discount_total = ? WHERE id = ?",
+            (round(gross_subtotal, 2), round(discount_total, 2), order_id))
+    except Exception:
+        pass
     
     # Insert line items
     for item in items:
+        qty = float(item.get("quantity", 1))
+        price = float(item.get("precio_unitario", item.get("price", 0)))
+        disc = float(item.get("discount_pct", item.get("discount", 0)) or 0)
+        line_total = round(qty * price * (1 - disc / 100), 6)
         db.execute(
             """INSERT INTO sales_order_items (order_id, producto_id, quantity, precio_unitario, discount)
                VALUES (?, ?, ?, ?, ?)""",
-            (order_id, item.get("producto_id"), item.get("quantity", 1),
-             item.get("precio_unitario", item.get("price", 0)), item.get("discount", 0))
+            (order_id, item.get("producto_id"), qty, price, disc)
         )
+        # discount_pct/line_total live in the D3 columns; keep `discount` in sync
+        try:
+            db.execute(
+                "UPDATE sales_order_items SET discount_pct = ?, line_total = ? "
+                "WHERE order_id = ? AND producto_id = ? AND line_total = 0",
+                (disc, line_total, order_id, item.get("producto_id")))
+        except Exception:
+            pass
     
     db.commit()
     

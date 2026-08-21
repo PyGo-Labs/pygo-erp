@@ -205,6 +205,11 @@ from core import lots  # noqa: F401
 from core import reservations  # noqa: F401
 from core.migrations import traceability as _mig_traceability  # noqa: F401
 
+# --- D3: sales returns, credit notes, credit limits ---
+from core import credit  # noqa: F401
+from core import sales_returns  # noqa: F401
+from core.migrations import sales_returns as _mig_sales_returns  # noqa: F401
+
 # --- Models ---
 
 class BaseModel:

@@ -139,6 +139,14 @@ def valuation_cogs(date_from=None, date_to=None, producto_id=None, **kwargs):
         f"SELECT SUM(quantity) AS qty, SUM(total_value) AS value "
         f"FROM stock_valuation_entries WHERE {clause}", params).fetchone()
 
+    # Netting: goods returned by customers reduce the period's cost of sales.
+    ret_clause = clause.replace("movement_type = 'out'",
+                                "movement_type = 'in' AND source_type = 'sales_return'")
+    returned = db.execute(
+        f"SELECT COALESCE(SUM(quantity), 0) AS qty, "
+        f"COALESCE(SUM(total_value), 0) AS value "
+        f"FROM stock_valuation_entries WHERE {ret_clause}", params).fetchone()
+
     rows = db.execute(
         f"SELECT v.producto_id, p.codigo, p.nombre, SUM(v.quantity) AS qty, "
         f"SUM(v.total_value) AS value FROM stock_valuation_entries v "
@@ -154,7 +162,11 @@ def valuation_cogs(date_from=None, date_to=None, producto_id=None, **kwargs):
         "date_from": date_from,
         "date_to": date_to,
         "total_quantity": round(float(total["qty"] or 0), 6),
-        "total_cogs": round(float(total["value"] or 0), 2),
+        "gross_cogs": round(float(total["value"] or 0), 2),
+        "returned_quantity": round(float(returned["qty"] or 0), 6),
+        "returned_cost": round(float(returned["value"] or 0), 2),
+        "total_cogs": round(float(total["value"] or 0)
+                            - float(returned["value"] or 0), 2),
         "by_product": [{
             "producto_id": r["producto_id"], "codigo": r["codigo"],
             "nombre": r["nombre"],
